@@ -73,6 +73,7 @@
 		"@sveltejs/adapter-cloudflare": "^7.2.3",
 		"gsap": "^3.13.0",
 		"ogl": "^1.0.11",
-		"svelte-themes": "^2.0.8"
+		"svelte-themes": "^2.0.8",
+		"wrangler": "^4.33.1"
 	}
 }
