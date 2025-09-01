@@ -70,6 +70,7 @@
 		]
 	},
 	"dependencies": {
+		"@sveltejs/adapter-cloudflare": "^7.2.3",
 		"gsap": "^3.13.0",
 		"ogl": "^1.0.11",
 		"svelte-themes": "^2.0.8"
