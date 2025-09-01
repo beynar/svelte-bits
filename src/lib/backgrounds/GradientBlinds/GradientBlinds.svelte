@@ -37,7 +37,7 @@
 		spotlightOpacity = 1,
 		distortAmount = 0,
 		shineDirection = 'left',
-		mixBlendMode = 'lighten'
+		mixBlendMode = 'darken'
 	}: GradientBlindsProps = $props();
 
 	const MAX_COLORS = 8;
@@ -363,6 +363,7 @@ void main() {
 	class="gradient-blinds-container {className}"
 	style:mix-blend-mode={mixBlendMode}
 	style:width={'100%'}
+	style:max-width={'100%'}
 	style:height={'100%'}
 	style:display={'block'}
 ></div>

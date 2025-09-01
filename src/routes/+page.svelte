@@ -1,22 +1,59 @@
 <script>
 	import GradientBlinds from '$lib/backgrounds/GradientBlinds/GradientBlinds.svelte';
+	import FaultyTerminal from '$lib/backgrounds/FaultyTerminal/FaultyTerminal.svelte';
+	import Galaxy from '$lib/backgrounds/Galaxy/Galaxy.svelte';
+	import Aurora from '$lib/backgrounds/Aurora/Aurora.svelte';
+	import Balatro from '$lib/backgrounds/Balatro/Balatro.svelte';
+	import DarkVeil from '$lib/backgrounds/DarkVeil/DarkVeil.svelte';
+	import GridMotion from '$lib/backgrounds/GridMotion/GridMotion.svelte';
+	import Iridescence from '$lib/backgrounds/Iridescence/Iridescence.svelte';
+	import LightRays from '$lib/backgrounds/LightRays/LightRays.svelte';
+	import LiquidChrome from '$lib/backgrounds/LiquidChrome/LiquidChrome.svelte';
+	import Orb from '$lib/backgrounds/Orb/Orb.svelte';
+	import Particles from '$lib/backgrounds/Particles/Particles.svelte';
+	import Plasma from '$lib/backgrounds/Plasma/Plasma.svelte';
+	import RippleGrid from '$lib/backgrounds/RippleGrid/RippleGrid.svelte';
+	import { useTheme } from 'svelte-themes';
 
-	let blindCount = $state(20);
+	const theme = useTheme();
+
+	console.log(theme);
 </script>
 
-<div
-	style:width={'100%'}
-	style:height={'50vh'}
-	style:display={'block'}
-	style:background-color={'black'}
->
-	<GradientBlinds
-		gradientColors={['#FF9FFC', '#5227FF']}
-		{blindCount}
-		blindMinWidth={1}
-		noise={0.5}
-	/>
-</div>
+{#snippet card(Component, title)}
+	<div class="flex flex-col gap-2 p-2">
+		<h2 class="text-lg font-bold">{title}</h2>
+		<div class="card border border-dashed border-border bg-bg-secondary p-1">
+			<Component />
+		</div>
+	</div>
+{/snippet}
 
-<button on:click={() => blindCount++}>Add Blind {blindCount}</button>
-<button on:click={() => blindCount--}>Remove Blind</button>
+{@render card(GradientBlinds, 'Gradient Blinds')}
+{@render card(FaultyTerminal, 'Faulty Terminal')}
+{@render card(Galaxy, 'Galaxy')}
+{@render card(Aurora, 'Aurora')}
+{@render card(Balatro, 'Balatro')}
+{@render card(DarkVeil, 'Dark Veil')}
+{@render card(GridMotion, 'Grid Motion')}
+{@render card(Iridescence, 'Iridescence')}
+{@render card(LightRays, 'Light Rays')}
+{@render card(LiquidChrome, 'Liquid Chrome')}
+{@render card(Orb, 'Orb')}
+{@render card(Particles, 'Particles')}
+{@render card(Plasma, 'Plasma')}
+{@render card(RippleGrid, 'Ripple Grid')}
+
+<style>
+	.card {
+		overflow: hidden;
+		position: relative;
+		border-radius: 0.5rem;
+		box-shadow: 0 0 10px 0 rgba(0, 0, 0, 0.1);
+		display: block;
+		width: 100%;
+		max-width: 100%;
+		margin: 2rem auto;
+		height: 500px;
+	}
+</style>
