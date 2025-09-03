@@ -1,6 +1,9 @@
 <script lang="ts">
-	// @ts-ignore
-	import { Renderer, Program, Mesh, Triangle } from 'ogl';
+	import Canvas from '$lib/ogl/Canvas.svelte';
+	import Program from '$lib/ogl/Program.svelte';
+	import Mesh from '$lib/ogl/Mesh.svelte';
+	import Triangle from '$lib/ogl/Triangle.svelte';
+	import type { OglContext } from '$lib/ogl/Canvas.svelte';
 
 	interface GradientBlindsProps {
 		className?: string;
@@ -55,36 +58,29 @@
 		if (base.length === 1) base.push(base[0]);
 		while (base.length < MAX_COLORS) base.push(base[base.length - 1]);
 		const arr: [number, number, number][] = [];
-		for (let i = 0; i < MAX_COLORS; i++) arr.push(hexToRGB(base[i]));
+		for (let i = 0; i < MAX_COLORS; i++) arr.push(ogl?.color.hexToArray(base[i]) || [1, 0, 1]);
 		const count = Math.max(2, Math.min(MAX_COLORS, stops?.length ?? 2));
 		return { arr, count };
 	};
 
-	let rafRef: number | null = null;
-	let programRef: Program | null = null;
-	let meshRef: Mesh<Triangle> | null = null;
-	let geometryRef: Triangle | null = null;
-	let rendererRef: Renderer | null = null;
-	let mouseTargetRef: [number, number] = [0, 0];
-	let lastTimeRef = 0;
-	let firstResizeRef = true;
+	let ogl = $state<OglContext | null>(null);
+	let mouseTarget = $state([0, 0]);
+	let lastTime = 0;
+	let firstResize = $state(true);
 
-	const gradientBlinds = (containerElement: HTMLDivElement) => {
-		const renderer = new Renderer({
-			dpr: dpr ?? (typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1),
-			alpha: true,
-			antialias: true
-		});
-		rendererRef = renderer;
-		const gl = renderer.gl;
-		const canvas = gl.canvas as HTMLCanvasElement;
+	// Derived values
+	const colorData = $derived(prepStops(gradientColors));
 
-		canvas.style.width = '100%';
-		canvas.style.height = '100%';
-		canvas.style.display = 'block';
-		containerElement.appendChild(canvas);
-
-		const vertex = `
+	// Mouse interaction handler - convert normalized coords to canvas pixels like original
+	const handleMouseMove = ({ x, y, rect }: { x: number; y: number; rect: DOMRect }) => {
+		if (!ogl?.gl) return;
+		const scale = dpr ?? (typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1);
+		// Convert normalized coordinates (0-1) to canvas pixel coordinates
+		const canvasX = x * ogl.gl.canvas.width;
+		const canvasY = y * ogl.gl.canvas.height; // Don't flip Y - Canvas already provides correct coordinates
+		mouseTarget = [canvasX, canvasY];
+	};
+	const vertex = `
 attribute vec2 position;
 attribute vec2 uv;
 varying vec2 vUv;
@@ -95,7 +91,7 @@ void main() {
 }
 `;
 
-		const fragment = `
+	const fragment = `
 #ifdef GL_ES
 precision mediump float;
 #endif
@@ -206,164 +202,121 @@ void main() {
     gl_FragColor = color;
 }
 `;
+</script>
 
-		const { arr: colorArr, count: colorCount } = prepStops(gradientColors);
-		const uniforms: {
-			iResolution: { value: [number, number, number] };
-			iMouse: { value: [number, number] };
-			iTime: { value: number };
-			uAngle: { value: number };
-			uNoise: { value: number };
-			uBlindCount: { value: number };
-			uSpotlightRadius: { value: number };
-			uSpotlightSoftness: { value: number };
-			uSpotlightOpacity: { value: number };
-			uMirror: { value: number };
-			uDistort: { value: number };
-			uShineFlip: { value: number };
-			uColor0: { value: [number, number, number] };
-			uColor1: { value: [number, number, number] };
-			uColor2: { value: [number, number, number] };
-			uColor3: { value: [number, number, number] };
-			uColor4: { value: [number, number, number] };
-			uColor5: { value: [number, number, number] };
-			uColor6: { value: [number, number, number] };
-			uColor7: { value: [number, number, number] };
-			uColorCount: { value: number };
-		} = {
-			iResolution: {
-				value: [gl.drawingBufferWidth, gl.drawingBufferHeight, 1]
-			},
-			iMouse: { value: [0, 0] },
+<Canvas
+	{dpr}
+	alpha={true}
+	antialias={true}
+	bind:ogl
+	onMouseMove={handleMouseMove}
+	class={className}
+>
+	<!-- style:mix-blend-mode={mixBlendMode} -->
+	<Program
+		{vertex}
+		{fragment}
+		uniforms={{
 			iTime: { value: 0 },
+			iResolution: { value: [1, 1, 1] },
+			iMouse: { value: [0, 0] },
 			uAngle: { value: (angle * Math.PI) / 180 },
 			uNoise: { value: noise },
 			uBlindCount: { value: Math.max(1, blindCount) },
 			uSpotlightRadius: { value: spotlightRadius },
 			uSpotlightSoftness: { value: spotlightSoftness },
 			uSpotlightOpacity: { value: spotlightOpacity },
-			uMirror: { value: mirrorGradient ? 1 : 0 },
+			uMirror: { value: mirrorGradient ? 1.0 : 0.0 },
 			uDistort: { value: distortAmount },
-			uShineFlip: { value: shineDirection === 'right' ? 1 : 0 },
-			uColor0: { value: colorArr[0] },
-			uColor1: { value: colorArr[1] },
-			uColor2: { value: colorArr[2] },
-			uColor3: { value: colorArr[3] },
-			uColor4: { value: colorArr[4] },
-			uColor5: { value: colorArr[5] },
-			uColor6: { value: colorArr[6] },
-			uColor7: { value: colorArr[7] },
-			uColorCount: { value: colorCount }
-		};
-
-		const program = new Program(gl, {
-			vertex,
-			fragment,
-			uniforms
-		});
-		programRef = program;
-
-		const geometry = new Triangle(gl);
-		geometryRef = geometry;
-		const mesh = new Mesh(gl, { geometry, program });
-		meshRef = mesh;
-
-		const resize = () => {
-			const rect = containerElement.getBoundingClientRect();
-			renderer.setSize(rect.width, rect.height);
-			uniforms.iResolution.value = [gl.drawingBufferWidth, gl.drawingBufferHeight, 1];
+			uShineFlip: { value: shineDirection === 'right' ? 1.0 : 0.0 },
+			uColor0: { value: colorData.arr[0] || [1, 0, 1] },
+			uColor1: { value: colorData.arr[1] || [0.32, 0.15, 1] },
+			uColor2: { value: colorData.arr[2] || [0.32, 0.15, 1] },
+			uColor3: { value: colorData.arr[3] || [0.32, 0.15, 1] },
+			uColor4: { value: colorData.arr[4] || [0.32, 0.15, 1] },
+			uColor5: { value: colorData.arr[5] || [0.32, 0.15, 1] },
+			uColor6: { value: colorData.arr[6] || [0.32, 0.15, 1] },
+			uColor7: { value: colorData.arr[7] || [0.32, 0.15, 1] },
+			uColorCount: { value: colorData.count }
+		}}
+		onResize={({ width, height }, program) => {
+			// Exact copy of original resize logic
+			program.program.uniforms.iResolution.value = [width, height, 1];
 
 			if (blindMinWidth && blindMinWidth > 0) {
-				const maxByMinWidth = Math.max(1, Math.floor(rect.width / blindMinWidth));
-
+				const maxByMinWidth = Math.max(1, Math.floor(width / blindMinWidth));
 				const effective = blindCount ? Math.min(blindCount, maxByMinWidth) : maxByMinWidth;
-				uniforms.uBlindCount.value = Math.max(1, effective);
+				program.program.uniforms.uBlindCount.value = Math.max(1, effective);
 			} else {
-				uniforms.uBlindCount.value = Math.max(1, blindCount);
+				program.program.uniforms.uBlindCount.value = Math.max(1, blindCount);
 			}
 
-			if (firstResizeRef) {
-				firstResizeRef = false;
-				const cx = gl.drawingBufferWidth / 2;
-				const cy = gl.drawingBufferHeight / 2;
-				uniforms.iMouse.value = [cx, cy];
-				mouseTargetRef = [cx, cy];
+			if (firstResize) {
+				firstResize = false;
+				const cx = width / 2;
+				const cy = height / 2;
+				program.program.uniforms.iMouse.value = [cx, cy];
+				mouseTarget = [cx, cy];
 			}
-		};
+		}}
+		onUpdate={({ time }, { program }) => {
+			if (paused) return;
 
-		resize();
-		const ro = new ResizeObserver(resize);
-		ro.observe(containerElement);
+			// Exact copy of original loop logic
+			const elapsed = time * 0.001;
+			program.uniforms.iTime.value = elapsed;
 
-		const onPointerMove = (e: PointerEvent) => {
-			const rect = canvas.getBoundingClientRect();
-			const scale = (renderer as unknown as { dpr?: number }).dpr || 1;
-			const x = (e.clientX - rect.left) * scale;
-			const y = (rect.height - (e.clientY - rect.top)) * scale;
-			mouseTargetRef = [x, y];
-			if (mouseDampening <= 0) {
-				uniforms.iMouse.value = [x, y];
-			}
-		};
-		canvas.addEventListener('pointermove', onPointerMove);
-
-		const loop = (t: number) => {
-			rafRef = requestAnimationFrame(loop);
-			uniforms.iTime.value = t * 0.001;
 			if (mouseDampening > 0) {
-				if (!lastTimeRef) lastTimeRef = t;
-				const dt = (t - lastTimeRef) / 1000;
-				lastTimeRef = t;
+				if (!lastTime) lastTime = time;
+				const dt = (time - lastTime) / 1000;
+				lastTime = time;
 				const tau = Math.max(1e-4, mouseDampening);
 				let factor = 1 - Math.exp(-dt / tau);
 				if (factor > 1) factor = 1;
-				const target = mouseTargetRef;
-				const cur = uniforms.iMouse.value;
+				const target = mouseTarget;
+				const cur = program.uniforms.iMouse.value;
 				cur[0] += (target[0] - cur[0]) * factor;
 				cur[1] += (target[1] - cur[1]) * factor;
 			} else {
-				lastTimeRef = t;
+				lastTime = time;
 			}
-			if (!paused && programRef && meshRef) {
-				try {
-					renderer.render({ scene: meshRef });
-				} catch (e) {
-					console.error(e);
-				}
-			}
-		};
-		rafRef = requestAnimationFrame(loop);
 
-		return () => {
-			if (rafRef) cancelAnimationFrame(rafRef);
-			canvas.removeEventListener('pointermove', onPointerMove);
-			ro.disconnect();
-			if (canvas.parentElement === containerElement) {
-				containerElement.removeChild(canvas);
-			}
-			const callIfFn = <T extends object, K extends keyof T>(obj: T | null, key: K) => {
-				if (obj && typeof obj[key] === 'function') {
-					(obj[key] as unknown as () => void).call(obj);
-				}
-			};
-			callIfFn(programRef, 'remove');
-			callIfFn(geometryRef, 'remove');
-			callIfFn(meshRef as unknown as { remove?: () => void }, 'remove');
-			callIfFn(rendererRef as unknown as { destroy?: () => void }, 'destroy');
-			programRef = null;
-			geometryRef = null;
-			meshRef = null;
-			rendererRef = null;
-		};
-	};
-</script>
+			// Update reactive uniforms
+			program.uniforms.uAngle.value = (angle * Math.PI) / 180;
+			program.uniforms.uNoise.value = noise;
+			program.uniforms.uSpotlightRadius.value = spotlightRadius;
+			program.uniforms.uSpotlightSoftness.value = spotlightSoftness;
+			program.uniforms.uSpotlightOpacity.value = spotlightOpacity;
+			program.uniforms.uMirror.value = mirrorGradient ? 1.0 : 0.0;
+			program.uniforms.uDistort.value = distortAmount;
+			program.uniforms.uShineFlip.value = shineDirection === 'right' ? 1.0 : 0.0;
 
-<div
-	{@attach gradientBlinds}
-	class="gradient-blinds-container {className}"
-	style:mix-blend-mode={mixBlendMode}
-	style:width={'100%'}
-	style:max-width={'100%'}
-	style:height={'100%'}
-	style:display={'block'}
-></div>
+			// Update blindCount reactively (respecting blindMinWidth if set)
+			if (blindMinWidth && blindMinWidth > 0 && ogl?.gl) {
+				const maxByMinWidth = Math.max(1, Math.floor(ogl.gl.canvas.width / blindMinWidth));
+				const effective = blindCount ? Math.min(blindCount, maxByMinWidth) : maxByMinWidth;
+				program.uniforms.uBlindCount.value = Math.max(1, effective);
+			} else {
+				program.uniforms.uBlindCount.value = Math.max(1, blindCount);
+			}
+
+			program.uniforms.uColor0.value = colorData.arr[0];
+			program.uniforms.uColor1.value = colorData.arr[1];
+			program.uniforms.uColor2.value = colorData.arr[2];
+			program.uniforms.uColor3.value = colorData.arr[3];
+			program.uniforms.uColor4.value = colorData.arr[4];
+			program.uniforms.uColor5.value = colorData.arr[5];
+			program.uniforms.uColor6.value = colorData.arr[6];
+			program.uniforms.uColor7.value = colorData.arr[7];
+			program.uniforms.uColorCount.value = colorData.count;
+		}}
+	>
+		<Triangle>
+			<Mesh
+				onUpdate={({ time }, mesh) => {
+					mesh.ogl.renderer?.render({ scene: mesh.mesh });
+				}}
+			/>
+		</Triangle>
+	</Program>
+</Canvas>

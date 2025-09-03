@@ -1,6 +1,8 @@
 <script lang="ts">
-	// @ts-ignore
-	import { Renderer, Program, Mesh, Color, Triangle } from 'ogl';
+	import Canvas, { OglContext } from '$lib/ogl/Canvas.svelte';
+	import Program from '$lib/ogl/Program.svelte';
+	import Mesh from '$lib/ogl/Mesh.svelte';
+	import Triangle from '$lib/ogl/Triangle.svelte';
 
 	type Vec2 = [number, number];
 
@@ -23,7 +25,7 @@
 		dpr?: number;
 		pageLoadAnimation?: boolean;
 		brightness?: number;
-		className?: string;
+		class: string;
 	}
 
 	let {
@@ -45,10 +47,10 @@
 		dpr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2) : 1,
 		pageLoadAnimation = true,
 		brightness = 1,
-		className = ''
+		class: className = ''
 	}: FaultyTerminalProps = $props();
 
-	const vertexShader = `
+	const vertex = `
 attribute vec2 position;
 attribute vec2 uv;
 varying vec2 vUv;
@@ -58,7 +60,7 @@ void main() {
 }
 `;
 
-	const fragmentShader = `
+	const fragment = `
 precision mediump float;
 
 varying vec2 vUv;
@@ -265,170 +267,110 @@ void main() {
 		return [((num >> 16) & 255) / 255, ((num >> 8) & 255) / 255, (num & 255) / 255];
 	}
 
-	// WebGL state variables
-	let rendererRef: Renderer | null = null;
-	let programRef: Program | null = null;
-	let meshRef: Mesh<Triangle> | null = null;
-	let geometryRef: Triangle | null = null;
-	let rafRef: number | null = null;
-	let mouseRef = { x: 0.5, y: 0.5 };
-	let smoothMouseRef = { x: 0.5, y: 0.5 };
-	let frozenTimeRef = 0;
-	let loadAnimationStartRef = 0;
-	let timeOffsetRef = Math.random() * 100;
+	let ogl = $state<OglContext | null>(null);
+	let mousePos = $state([0.5, 0.5]);
+	let smoothMousePos = $state([0.5, 0.5]);
+	let frozenTime = $state(0);
+	let loadAnimationStart = $state(0);
+	let timeOffset = $state(Math.random() * 100);
+	let pageLoadProgress = $state(pageLoadAnimation ? 0 : 1);
 
 	// Derived values
-	let tintVec = $derived(hexToRgb(tint));
-	let ditherValue = $derived(typeof dither === 'boolean' ? (dither ? 1 : 0) : dither);
+	const tintVec = $derived(hexToRgb(tint));
+	const ditherValue = $derived(typeof dither === 'boolean' ? (dither ? 1 : 0) : dither);
 
-	const createFaultyTerminal = (containerElement: HTMLDivElement) => {
-		const renderer = new Renderer({ dpr });
-		rendererRef = renderer;
-		const gl = renderer.gl;
-		gl.clearColor(0, 0, 0, 1);
+	// Mouse smoothing effect
+	$effect(() => {
+		if (!mouseReact) return;
+		const dampingFactor = 0.08;
+		smoothMousePos[0] += (mousePos[0] - smoothMousePos[0]) * dampingFactor;
+		smoothMousePos[1] += (mousePos[1] - smoothMousePos[1]) * dampingFactor;
+	});
+</script>
 
-		const geometry = new Triangle(gl);
-		geometryRef = geometry;
-
-		const program = new Program(gl, {
-			vertex: vertexShader,
-			fragment: fragmentShader,
-			uniforms: {
-				iTime: { value: 0 },
-				iResolution: {
-					value: new Color(gl.canvas.width, gl.canvas.height, gl.canvas.width / gl.canvas.height)
-				},
-				uScale: { value: scale },
-				uGridMul: { value: new Float32Array(gridMul) },
-				uDigitSize: { value: digitSize },
-				uScanlineIntensity: { value: scanlineIntensity },
-				uGlitchAmount: { value: glitchAmount },
-				uFlickerAmount: { value: flickerAmount },
-				uNoiseAmp: { value: noiseAmp },
-				uChromaticAberration: { value: chromaticAberration },
-				uDither: { value: ditherValue },
-				uCurvature: { value: curvature },
-				uTint: { value: new Color(tintVec[0], tintVec[1], tintVec[2]) },
-				uMouse: {
-					value: new Float32Array([smoothMouseRef.x, smoothMouseRef.y])
-				},
-				uMouseStrength: { value: mouseStrength },
-				uUseMouse: { value: mouseReact ? 1 : 0 },
-				uPageLoadProgress: { value: pageLoadAnimation ? 0 : 1 },
-				uUsePageLoadAnimation: { value: pageLoadAnimation ? 1 : 0 },
-				uBrightness: { value: brightness }
+<Canvas
+	bind:ogl
+	class={className}
+	{dpr}
+	onMouseMove={mouseReact
+		? ({ x, y }) => {
+				mousePos = [x, y];
 			}
-		});
-		programRef = program;
-
-		const mesh = new Mesh(gl, { geometry, program });
-		meshRef = mesh;
-
-		const resize = () => {
-			if (!containerElement || !renderer) return;
-			renderer.setSize(containerElement.offsetWidth, containerElement.offsetHeight);
-			program.uniforms.iResolution.value = new Color(
-				gl.canvas.width,
-				gl.canvas.height,
-				gl.canvas.width / gl.canvas.height
-			);
-		};
-
-		const resizeObserver = new ResizeObserver(() => resize());
-		resizeObserver.observe(containerElement);
-		resize();
-
-		const handleMouseMove = (e: MouseEvent) => {
-			const rect = containerElement.getBoundingClientRect();
-			const x = (e.clientX - rect.left) / rect.width;
-			const y = 1 - (e.clientY - rect.top) / rect.height;
-			mouseRef = { x, y };
-		};
-
-		const update = (t: number) => {
-			rafRef = requestAnimationFrame(update);
-
-			if (pageLoadAnimation && loadAnimationStartRef === 0) {
-				loadAnimationStartRef = t;
-			}
-
-			if (!pause) {
-				const elapsed = (t * 0.001 + timeOffsetRef) * timeScale;
-				program.uniforms.iTime.value = elapsed;
-				frozenTimeRef = elapsed;
-			} else {
-				program.uniforms.iTime.value = frozenTimeRef;
-			}
-
-			if (pageLoadAnimation && loadAnimationStartRef > 0) {
+		: undefined}
+	onMount={() => {
+		loadAnimationStart = performance.now();
+	}}
+>
+	<Program
+		onResize={({ width, height }, program) => {
+			program.program.uniforms.iResolution.value = [width, height, width / height];
+		}}
+		{vertex}
+		{fragment}
+		uniforms={{
+			iTime: { value: 0 },
+			iResolution: { value: [0, 0, 0] },
+			uScale: { value: scale },
+			uGridMul: { value: gridMul },
+			uDigitSize: { value: digitSize },
+			uScanlineIntensity: { value: scanlineIntensity },
+			uGlitchAmount: { value: glitchAmount },
+			uFlickerAmount: { value: flickerAmount },
+			uNoiseAmp: { value: noiseAmp },
+			uChromaticAberration: { value: chromaticAberration },
+			uDither: { value: ditherValue },
+			uCurvature: { value: curvature },
+			uTint: { value: tintVec },
+			uMouse: { value: smoothMousePos },
+			uMouseStrength: { value: mouseStrength },
+			uUseMouse: { value: mouseReact ? 1 : 0 },
+			uPageLoadProgress: { value: pageLoadProgress },
+			uUsePageLoadAnimation: { value: pageLoadAnimation ? 1 : 0 },
+			uBrightness: { value: brightness }
+		}}
+		onUpdate={({ time }, program) => {
+			// Handle page load animation
+			if (pageLoadAnimation && loadAnimationStart > 0) {
 				const animationDuration = 2000;
-				const animationElapsed = t - loadAnimationStartRef;
-				const progress = Math.min(animationElapsed / animationDuration, 1);
-				program.uniforms.uPageLoadProgress.value = progress;
+				const animationElapsed = performance.now() - loadAnimationStart;
+				pageLoadProgress = Math.min(animationElapsed / animationDuration, 1);
 			}
 
-			if (mouseReact) {
-				const dampingFactor = 0.08;
-				smoothMouseRef.x += (mouseRef.x - smoothMouseRef.x) * dampingFactor;
-				smoothMouseRef.y += (mouseRef.y - smoothMouseRef.y) * dampingFactor;
-
-				const mouseUniform = program.uniforms.uMouse.value as Float32Array;
-				mouseUniform[0] = smoothMouseRef.x;
-				mouseUniform[1] = smoothMouseRef.y;
+			// Handle time
+			if (!pause) {
+				const elapsed = (time * 0.001 + timeOffset) * timeScale;
+				program.program.uniforms.iTime.value = elapsed;
+				frozenTime = elapsed;
+			} else {
+				program.program.uniforms.iTime.value = frozenTime;
 			}
 
 			// Update uniforms with current prop values for reactivity
-			program.uniforms.uScale.value = scale;
-			program.uniforms.uGridMul.value = new Float32Array(gridMul);
-			program.uniforms.uDigitSize.value = digitSize;
-			program.uniforms.uScanlineIntensity.value = scanlineIntensity;
-			program.uniforms.uGlitchAmount.value = glitchAmount;
-			program.uniforms.uFlickerAmount.value = flickerAmount;
-			program.uniforms.uNoiseAmp.value = noiseAmp;
-			program.uniforms.uChromaticAberration.value = chromaticAberration;
-			program.uniforms.uDither.value = ditherValue;
-			program.uniforms.uCurvature.value = curvature;
-			program.uniforms.uTint.value = new Color(tintVec[0], tintVec[1], tintVec[2]);
-			program.uniforms.uMouseStrength.value = mouseStrength;
-			program.uniforms.uUseMouse.value = mouseReact ? 1 : 0;
-			program.uniforms.uUsePageLoadAnimation.value = pageLoadAnimation ? 1 : 0;
-			program.uniforms.uBrightness.value = brightness;
-
-			renderer.render({ scene: mesh });
-		};
-
-		rafRef = requestAnimationFrame(update);
-		containerElement.appendChild(gl.canvas);
-
-		if (mouseReact) containerElement.addEventListener('mousemove', handleMouseMove);
-
-		return () => {
-			if (rafRef) cancelAnimationFrame(rafRef);
-			resizeObserver.disconnect();
-			if (mouseReact) containerElement.removeEventListener('mousemove', handleMouseMove);
-			if (gl.canvas.parentElement === containerElement) containerElement.removeChild(gl.canvas);
-			gl.getExtension('WEBGL_lose_context')?.loseContext();
-
-			// Reset state
-			loadAnimationStartRef = 0;
-			timeOffsetRef = Math.random() * 100;
-
-			// Cleanup refs
-			rendererRef = null;
-			programRef = null;
-			meshRef = null;
-			geometryRef = null;
-			rafRef = null;
-		};
-	};
-</script>
-
-<div {@attach createFaultyTerminal} class="faulty-terminal-container {className}"></div>
-
-<style>
-	.faulty-terminal-container {
-		width: 100%;
-		height: 100%;
-		display: block;
-	}
-</style>
+			program.program.uniforms.uScale.value = scale;
+			program.program.uniforms.uGridMul.value = gridMul;
+			program.program.uniforms.uDigitSize.value = digitSize;
+			program.program.uniforms.uScanlineIntensity.value = scanlineIntensity;
+			program.program.uniforms.uGlitchAmount.value = glitchAmount;
+			program.program.uniforms.uFlickerAmount.value = flickerAmount;
+			program.program.uniforms.uNoiseAmp.value = noiseAmp;
+			program.program.uniforms.uChromaticAberration.value = chromaticAberration;
+			program.program.uniforms.uDither.value = ditherValue;
+			program.program.uniforms.uCurvature.value = curvature;
+			program.program.uniforms.uTint.value = tintVec;
+			program.program.uniforms.uMouse.value = smoothMousePos;
+			program.program.uniforms.uMouseStrength.value = mouseStrength;
+			program.program.uniforms.uUseMouse.value = mouseReact ? 1 : 0;
+			program.program.uniforms.uPageLoadProgress.value = pageLoadProgress;
+			program.program.uniforms.uUsePageLoadAnimation.value = pageLoadAnimation ? 1 : 0;
+			program.program.uniforms.uBrightness.value = brightness;
+		}}
+	>
+		<Triangle>
+			<Mesh
+				onUpdate={({ time }, mesh) => {
+					mesh.ogl.renderer?.render({ scene: mesh.mesh });
+				}}
+			/>
+		</Triangle>
+	</Program>
+</Canvas>

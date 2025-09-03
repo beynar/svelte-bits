@@ -1,6 +1,8 @@
 <script lang="ts">
-	// @ts-ignore
-	import { Renderer, Program, Mesh, Triangle } from 'ogl';
+	import Canvas, { OglContext } from '$lib/ogl/Canvas.svelte';
+	import Program from '$lib/ogl/Program.svelte';
+	import Mesh from '$lib/ogl/Mesh.svelte';
+	import Triangle from '$lib/ogl/Triangle.svelte';
 
 	interface BalatroProps {
 		spinRotation?: number;
@@ -16,7 +18,7 @@
 		spinEase?: number;
 		isRotate?: boolean;
 		mouseInteraction?: boolean;
-		className?: string;
+		class: string;
 	}
 
 	let {
@@ -33,7 +35,7 @@
 		spinEase = 1.0,
 		isRotate = false,
 		mouseInteraction = true,
-		className = ''
+		class: className = ''
 	}: BalatroProps = $props();
 
 	function hexToVec4(hex: string): [number, number, number, number] {
@@ -55,7 +57,7 @@
 		return [r, g, b, a];
 	}
 
-	const vertexShader = `
+	const vertex = `
 attribute vec2 uv;
 attribute vec2 position;
 varying vec2 vUv;
@@ -65,7 +67,7 @@ void main() {
 }
 `;
 
-	const fragmentShader = `
+	const fragment = `
 precision highp float;
 
 #define PI 3.14159265359
@@ -137,121 +139,72 @@ void main() {
 }
 `;
 
-	// WebGL state variables
-	let rendererRef: Renderer | null = null;
-	let programRef: Program | null = null;
-	let meshRef: Mesh<Triangle> | null = null;
-	let geometryRef: Triangle | null = null;
-	let rafRef: number | null = null;
+	let ogl = $state<OglContext | null>(null);
+	let mousePos = $state([0.5, 0.5]);
 
-	const createBalatro = (containerElement: HTMLDivElement) => {
-		const renderer = new Renderer();
-		rendererRef = renderer;
-		const gl = renderer.gl;
-		gl.clearColor(0, 0, 0, 1);
-
-		const resize = () => {
-			renderer.setSize(containerElement.offsetWidth, containerElement.offsetHeight);
-			if (programRef) {
-				programRef.uniforms.iResolution.value = [
-					gl.canvas.width,
-					gl.canvas.height,
-					gl.canvas.width / gl.canvas.height
-				];
-			}
-		};
-		window.addEventListener('resize', resize);
-		resize();
-
-		const geometry = new Triangle(gl);
-		geometryRef = geometry;
-
-		const program = new Program(gl, {
-			vertex: vertexShader,
-			fragment: fragmentShader,
-			uniforms: {
-				iTime: { value: 0 },
-				iResolution: {
-					value: [gl.canvas.width, gl.canvas.height, gl.canvas.width / gl.canvas.height]
-				},
-				uSpinRotation: { value: spinRotation },
-				uSpinSpeed: { value: spinSpeed },
-				uOffset: { value: offset },
-				uColor1: { value: hexToVec4(color1) },
-				uColor2: { value: hexToVec4(color2) },
-				uColor3: { value: hexToVec4(color3) },
-				uContrast: { value: contrast },
-				uLighting: { value: lighting },
-				uSpinAmount: { value: spinAmount },
-				uPixelFilter: { value: pixelFilter },
-				uSpinEase: { value: spinEase },
-				uIsRotate: { value: isRotate },
-				uMouse: { value: [0.5, 0.5] }
-			}
-		});
-		programRef = program;
-
-		const mesh = new Mesh(gl, { geometry, program });
-		meshRef = mesh;
-
-		const update = (time: number) => {
-			rafRef = requestAnimationFrame(update);
-			if (programRef) {
-				programRef.uniforms.iTime.value = time * 0.001;
-
-				// Update reactive uniforms
-				programRef.uniforms.uSpinRotation.value = spinRotation;
-				programRef.uniforms.uSpinSpeed.value = spinSpeed;
-				programRef.uniforms.uOffset.value = offset;
-				programRef.uniforms.uColor1.value = hexToVec4(color1);
-				programRef.uniforms.uColor2.value = hexToVec4(color2);
-				programRef.uniforms.uColor3.value = hexToVec4(color3);
-				programRef.uniforms.uContrast.value = contrast;
-				programRef.uniforms.uLighting.value = lighting;
-				programRef.uniforms.uSpinAmount.value = spinAmount;
-				programRef.uniforms.uPixelFilter.value = pixelFilter;
-				programRef.uniforms.uSpinEase.value = spinEase;
-				programRef.uniforms.uIsRotate.value = isRotate;
-			}
-			renderer.render({ scene: mesh });
-		};
-		rafRef = requestAnimationFrame(update);
-		containerElement.appendChild(gl.canvas);
-
-		const handleMouseMove = (e: MouseEvent) => {
-			if (!mouseInteraction || !programRef) return;
-			const rect = containerElement.getBoundingClientRect();
-			const x = (e.clientX - rect.left) / rect.width;
-			const y = 1.0 - (e.clientY - rect.top) / rect.height;
-			programRef.uniforms.uMouse.value = [x, y];
-		};
-		containerElement.addEventListener('mousemove', handleMouseMove);
-
-		return () => {
-			if (rafRef) cancelAnimationFrame(rafRef);
-			window.removeEventListener('resize', resize);
-			containerElement.removeEventListener('mousemove', handleMouseMove);
-			if (containerElement.contains(gl.canvas)) {
-				containerElement.removeChild(gl.canvas);
-			}
-			gl.getExtension('WEBGL_lose_context')?.loseContext();
-
-			// Cleanup refs
-			rendererRef = null;
-			programRef = null;
-			meshRef = null;
-			geometryRef = null;
-			rafRef = null;
-		};
-	};
+	// Convert hex colors to vec4 arrays using $derived
+	const color1Vec4 = $derived(hexToVec4(color1));
+	const color2Vec4 = $derived(hexToVec4(color2));
+	const color3Vec4 = $derived(hexToVec4(color3));
 </script>
 
-<div {@attach createBalatro} class="balatro-container {className}"></div>
+<Canvas
+	bind:ogl
+	class={className}
+	onMouseMove={({ x, y }) => {
+		if (mouseInteraction) {
+			mousePos = [x, y];
+		}
+	}}
+>
+	<Program
+		onResize={({ width, height }, program) => {
+			program.program.uniforms.iResolution.value = [width, height, width / height];
+		}}
+		{vertex}
+		{fragment}
+		uniforms={{
+			iTime: { value: 0 },
+			iResolution: { value: [0, 0, 0] },
+			uSpinRotation: { value: spinRotation },
+			uSpinSpeed: { value: spinSpeed },
+			uOffset: { value: offset },
+			uColor1: { value: color1Vec4 },
+			uColor2: { value: color2Vec4 },
+			uColor3: { value: color3Vec4 },
+			uContrast: { value: contrast },
+			uLighting: { value: lighting },
+			uSpinAmount: { value: spinAmount },
+			uPixelFilter: { value: pixelFilter },
+			uSpinEase: { value: spinEase },
+			uIsRotate: { value: isRotate },
+			uMouse: { value: mousePos }
+		}}
+		onUpdate={({ time }, program) => {
+			program.program.uniforms.iTime.value = time * 0.001;
 
-<style>
-	.balatro-container {
-		width: 100%;
-		height: 100%;
-		display: block;
-	}
-</style>
+			// Update uniforms with current prop values for reactivity
+			program.program.uniforms.uSpinRotation.value = spinRotation;
+			program.program.uniforms.uSpinSpeed.value = spinSpeed;
+			program.program.uniforms.uOffset.value = offset;
+			program.program.uniforms.uColor1.value = color1Vec4;
+			program.program.uniforms.uColor2.value = color2Vec4;
+			program.program.uniforms.uColor3.value = color3Vec4;
+			program.program.uniforms.uContrast.value = contrast;
+			program.program.uniforms.uLighting.value = lighting;
+			program.program.uniforms.uSpinAmount.value = spinAmount;
+			program.program.uniforms.uPixelFilter.value = pixelFilter;
+			program.program.uniforms.uSpinEase.value = spinEase;
+			program.program.uniforms.uIsRotate.value = isRotate;
+			program.program.uniforms.uMouse.value = mousePos;
+		}}
+	>
+		<Triangle>
+			<Mesh
+				onUpdate={({ time }, mesh) => {
+					mesh.ogl.renderer?.render({ scene: mesh.mesh });
+				}}
+			/>
+		</Triangle>
+	</Program>
+</Canvas>

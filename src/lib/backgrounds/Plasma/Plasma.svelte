@@ -1,6 +1,8 @@
 <script lang="ts">
-	// @ts-ignore
-	import { Renderer, Program, Mesh, Triangle } from 'ogl';
+	import Canvas, { OglContext } from '$lib/ogl/Canvas.svelte';
+	import Program from '$lib/ogl/Program.svelte';
+	import Mesh from '$lib/ogl/Mesh.svelte';
+	import Triangle from '$lib/ogl/Triangle.svelte';
 
 	interface PlasmaProps {
 		color?: string;
@@ -9,7 +11,7 @@
 		scale?: number;
 		opacity?: number;
 		mouseInteractive?: boolean;
-		className?: string;
+		class: string;
 	}
 
 	let {
@@ -19,7 +21,7 @@
 		scale = 1,
 		opacity = 1,
 		mouseInteractive = true,
-		className = ''
+		class: className = ''
 	}: PlasmaProps = $props();
 
 	const hexToRgb = (hex: string): [number, number, number] => {
@@ -32,7 +34,7 @@
 		];
 	};
 
-	const vertexShader = `#version 300 es
+	const vertex = `#version 300 es
 precision highp float;
 in vec2 position;
 in vec2 uv;
@@ -43,7 +45,7 @@ void main() {
 }
 `;
 
-	const fragmentShader = `#version 300 es
+	const fragment = `#version 300 es
 precision highp float;
 uniform vec2 iResolution;
 uniform float iTime;
@@ -104,157 +106,91 @@ void main() {
   fragColor = vec4(finalColor, alpha);
 }`;
 
-	// WebGL state variables
-	let rendererRef: Renderer | null = null;
-	let programRef: Program | null = null;
-	let meshRef: Mesh<Triangle> | null = null;
-	let geometryRef: Triangle | null = null;
-	let rafRef: number | null = null;
-	let resizeObserverRef: ResizeObserver | null = null;
+	let ogl: OglContext | null = null;
 	let mousePos = { x: 0, y: 0 };
+	let t0 = performance.now();
 
-	const createPlasma = (containerElement: HTMLDivElement) => {
-		const useCustomColor = color ? 1.0 : 0.0;
-		const customColorRgb = color ? hexToRgb(color) : [1, 1, 1];
-		const directionMultiplier = direction === 'reverse' ? -1.0 : 1.0;
-
-		const renderer = new Renderer({
-			webgl: 2,
-			alpha: true,
-			antialias: false,
-			dpr: Math.min(window.devicePixelRatio || 1, 2)
-		});
-		rendererRef = renderer;
-		
-		const gl = renderer.gl;
-		const canvas = gl.canvas as HTMLCanvasElement;
-		canvas.style.display = 'block';
-		canvas.style.width = '100%';
-		canvas.style.height = '100%';
-		containerElement.appendChild(canvas);
-
-		const geometry = new Triangle(gl);
-		geometryRef = geometry;
-
-		const program = new Program(gl, {
-			vertex: vertexShader,
-			fragment: fragmentShader,
-			uniforms: {
-				iTime: { value: 0 },
-				iResolution: { value: new Float32Array([1, 1]) },
-				uCustomColor: { value: new Float32Array(customColorRgb) },
-				uUseCustomColor: { value: useCustomColor },
-				uSpeed: { value: speed * 0.4 },
-				uDirection: { value: directionMultiplier },
-				uScale: { value: scale },
-				uOpacity: { value: opacity },
-				uMouse: { value: new Float32Array([0, 0]) },
-				uMouseInteractive: { value: mouseInteractive ? 1.0 : 0.0 }
-			}
-		});
-		programRef = program;
-
-		const mesh = new Mesh(gl, { geometry, program });
-		meshRef = mesh;
-
-		const handleMouseMove = (e: MouseEvent) => {
-			if (!mouseInteractive) return;
-			const rect = containerElement.getBoundingClientRect();
-			mousePos.x = e.clientX - rect.left;
-			mousePos.y = e.clientY - rect.top;
-			const mouseUniform = program.uniforms.uMouse.value as Float32Array;
-			mouseUniform[0] = mousePos.x;
-			mouseUniform[1] = mousePos.y;
-		};
-
-		if (mouseInteractive) {
-			containerElement.addEventListener('mousemove', handleMouseMove);
-		}
-
-		const setSize = () => {
-			const rect = containerElement.getBoundingClientRect();
-			const width = Math.max(1, Math.floor(rect.width));
-			const height = Math.max(1, Math.floor(rect.height));
-			renderer.setSize(width, height);
-			const res = program.uniforms.iResolution.value as Float32Array;
-			res[0] = gl.drawingBufferWidth;
-			res[1] = gl.drawingBufferHeight;
-		};
-
-		const ro = new ResizeObserver(setSize);
-		resizeObserverRef = ro;
-		ro.observe(containerElement);
-		setSize();
-
-		const t0 = performance.now();
-		const loop = (t: number) => {
-			let timeValue = (t - t0) * 0.001;
-
-			// Update reactive props
-			if (programRef) {
-				// Update color
-				const currentUseCustomColor = color ? 1.0 : 0.0;
-				const currentCustomColorRgb = color ? hexToRgb(color) : [1, 1, 1];
-				const colorArray = programRef.uniforms.uCustomColor.value as Float32Array;
-				colorArray[0] = currentCustomColorRgb[0];
-				colorArray[1] = currentCustomColorRgb[1];
-				colorArray[2] = currentCustomColorRgb[2];
-				programRef.uniforms.uUseCustomColor.value = currentUseCustomColor;
-
-				// Update other uniforms
-				programRef.uniforms.uSpeed.value = speed * 0.4;
-				programRef.uniforms.uScale.value = scale;
-				programRef.uniforms.uOpacity.value = opacity;
-				programRef.uniforms.uMouseInteractive.value = mouseInteractive ? 1.0 : 0.0;
-
-				// Handle direction changes
-				if (direction === 'pingpong') {
-					const cycle = Math.sin(timeValue * 0.5) * (direction === 'reverse' ? -1.0 : 1.0);
-					programRef.uniforms.uDirection.value = cycle;
-				} else {
-					const currentDirectionMultiplier = direction === 'reverse' ? -1.0 : 1.0;
-					programRef.uniforms.uDirection.value = currentDirectionMultiplier;
-				}
-
-				programRef.uniforms.iTime.value = timeValue;
-				renderer.render({ scene: mesh });
-			}
-			rafRef = requestAnimationFrame(loop);
-		};
-		rafRef = requestAnimationFrame(loop);
-
-		return () => {
-			if (rafRef) cancelAnimationFrame(rafRef);
-			if (resizeObserverRef) resizeObserverRef.disconnect();
-			if (mouseInteractive && containerElement) {
-				containerElement.removeEventListener('mousemove', handleMouseMove);
-			}
-			try {
-				if (containerElement && canvas.parentNode === containerElement) {
-					containerElement.removeChild(canvas);
-				}
-			} catch (e) {
-				// Ignore cleanup errors
-			}
-			gl.getExtension('WEBGL_lose_context')?.loseContext();
-
-			// Cleanup refs
-			rendererRef = null;
-			programRef = null;
-			meshRef = null;
-			geometryRef = null;
-			rafRef = null;
-			resizeObserverRef = null;
-		};
+	// Mouse interaction handlers
+	const handleMouseMove = ({ x, y }: { x: number; y: number }) => {
+		if (!mouseInteractive || !ogl?.container) return;
+		const rect = ogl.container.getBoundingClientRect();
+		mousePos.x = x * rect.width;
+		mousePos.y = y * rect.height;
 	};
 </script>
 
-<div {@attach createPlasma} class="plasma-container {className}"></div>
+<Canvas
+	bind:ogl
+	class={className}
+	alpha={true}
+	antialias={false}
+	dpr={typeof window !== 'undefined' ? Math.min(window.devicePixelRatio, 2) : 1}
+	onMouseMove={handleMouseMove}
+>
+	{#snippet children(ogl)}
+		{#if ogl.container}
+			<Program
+				onResize={({ width, height }, program) => {
+					const gl = ogl.gl;
+					const res = program.program.uniforms.iResolution.value as Float32Array;
+					res[0] = gl.drawingBufferWidth;
+					res[1] = gl.drawingBufferHeight;
+				}}
+				onMount={({ program }) => {
+					const gl = ogl.gl;
+					const res = program.uniforms.iResolution.value as Float32Array;
+					res[0] = gl.drawingBufferWidth;
+					res[1] = gl.drawingBufferHeight;
+				}}
+				{vertex}
+				{fragment}
+				uniforms={{
+					iTime: { value: 0 },
+					iResolution: { value: new Float32Array([1, 1]) },
+					uCustomColor: { value: new Float32Array(hexToRgb(color)) },
+					uUseCustomColor: { value: color ? 1.0 : 0.0 },
+					uSpeed: { value: speed * 0.4 },
+					uDirection: { value: direction === 'reverse' ? -1.0 : 1.0 },
+					uScale: { value: scale },
+					uOpacity: { value: opacity },
+					uMouse: { value: new Float32Array([0, 0]) },
+					uMouseInteractive: { value: mouseInteractive ? 1.0 : 0.0 }
+				}}
+				onUpdate={({ time }, program) => {
+					let timeValue = (time - t0) * 0.001;
+					// Update color
+					const currentUseCustomColor = color ? 1.0 : 0.0;
+					const currentCustomColorRgb = hexToRgb(color);
+					program.program.uniforms.uCustomColor.value = currentCustomColorRgb;
+					program.program.uniforms.uUseCustomColor.value = currentUseCustomColor;
 
-<style>
-	.plasma-container {
-		width: 100%;
-		height: 100%;
-		display: block;
-	}
-</style>
+					// Update other uniforms
+					program.program.uniforms.uSpeed.value = speed * 0.4;
+					program.program.uniforms.uScale.value = scale;
+					program.program.uniforms.uOpacity.value = opacity;
+					program.program.uniforms.uMouseInteractive.value = mouseInteractive ? 1.0 : 0.0;
+					program.program.uniforms.uMouse.value = [mousePos.x, mousePos.y];
+
+					// Handle direction changes
+					if (direction === 'pingpong') {
+						const cycle = Math.sin(timeValue * 0.5) * 1.0;
+						program.program.uniforms.uDirection.value = cycle;
+					} else {
+						const currentDirectionMultiplier = direction === 'reverse' ? -1.0 : 1.0;
+						program.program.uniforms.uDirection.value = currentDirectionMultiplier;
+					}
+
+					program.program.uniforms.iTime.value = timeValue;
+				}}
+			>
+				<Triangle>
+					<Mesh
+						onUpdate={({ time }, mesh) => {
+							mesh.ogl.renderer?.render({ scene: mesh.mesh });
+						}}
+					/>
+				</Triangle>
+			</Program>
+		{/if}
+	{/snippet}
+</Canvas>

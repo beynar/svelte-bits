@@ -302,21 +302,21 @@ export const components = [
 			noiseIntensity: {
 				type: 'range',
 				min: 0,
-				max: 1,
+				max: 2,
 				step: 0.01,
 				value: 0
 			},
 			scanlineIntensity: {
 				type: 'range',
 				min: 0,
-				max: 1,
+				max: 10,
 				step: 0.01,
 				value: 0
 			},
 			speed: {
 				type: 'range',
 				min: 0,
-				max: 3,
+				max: 10,
 				step: 0.1,
 				value: 0.5
 			},
@@ -330,14 +330,14 @@ export const components = [
 			warpAmount: {
 				type: 'range',
 				min: 0,
-				max: 1,
+				max: 20,
 				step: 0.01,
 				value: 0
 			},
 			resolutionScale: {
 				type: 'range',
 				min: 0.1,
-				max: 2,
+				max: 20,
 				step: 0.1,
 				value: 1
 			}
@@ -728,8 +728,8 @@ export const components = [
 			distortAmount: {
 				type: 'range',
 				min: 0,
-				max: 1,
-				step: 0.01,
+				max: 100,
+				step: 1,
 				value: 0
 			},
 			shineDirection: {

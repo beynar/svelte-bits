@@ -1,6 +1,9 @@
 <script lang="ts">
-	// @ts-ignore
-	import { Renderer, Program, Mesh, Triangle, Vec3 } from 'ogl';
+	import Canvas from '$lib/ogl/Canvas.svelte';
+	import Program from '$lib/ogl/Program.svelte';
+	import Mesh from '$lib/ogl/Mesh.svelte';
+	import Triangle from '$lib/ogl/Triangle.svelte';
+	import type { OglContext } from '$lib/ogl/Canvas.svelte';
 
 	interface OrbProps {
 		hue?: number;
@@ -18,7 +21,33 @@
 		className = ''
 	}: OrbProps = $props();
 
-	const vertexShader = /* glsl */ `
+	let ogl = $state<OglContext | null>(null);
+	let targetHover = $state(0);
+	let currentHover = $state(0);
+	let currentRot = $state(0);
+	let lastTime = 0;
+	const rotationSpeed = 0.3;
+
+	// Hover detection handler
+	const handleMouseMove = ({ x, y, rect }: { x: number; y: number; rect: DOMRect }) => {
+		const width = rect.width;
+		const height = rect.height;
+		const size = Math.min(width, height);
+		const centerX = width / 2;
+		const centerY = height / 2;
+		const mouseX = x * width;
+		const mouseY = y * height;
+		const uvX = ((mouseX - centerX) / size) * 2.0;
+		const uvY = ((mouseY - centerY) / size) * 2.0;
+
+		if (Math.sqrt(uvX * uvX + uvY * uvY) < 0.8) {
+			targetHover = 1;
+		} else {
+			targetHover = 0;
+		}
+	};
+
+	const vertex = /* glsl */ `
     precision highp float;
     attribute vec2 position;
     attribute vec2 uv;
@@ -29,7 +58,7 @@
     }
   `;
 
-	const fragmentShader = /* glsl */ `
+	const fragment = /* glsl */ `
     precision highp float;
 
     uniform float iTime;
@@ -176,141 +205,65 @@
       gl_FragColor = vec4(col.rgb * col.a, col.a);
     }
   `;
-
-	// WebGL state variables
-	let rendererRef: Renderer | null = null;
-	let programRef: Program | null = null;
-	let meshRef: Mesh<Triangle> | null = null;
-	let geometryRef: Triangle | null = null;
-	let rafRef: number | null = null;
-	let targetHover = 0;
-	let lastTime = 0;
-	let currentRot = 0;
-	const rotationSpeed = 0.3;
-
-	const createOrb = (containerElement: HTMLDivElement) => {
-		const renderer = new Renderer({ alpha: true, premultipliedAlpha: false });
-		rendererRef = renderer;
-		const gl = renderer.gl;
-
-		gl.clearColor(0, 0, 0, 0);
-		containerElement.appendChild(gl.canvas);
-
-		const geometry = new Triangle(gl);
-		geometryRef = geometry;
-
-		const program = new Program(gl, {
-			vertex: vertexShader,
-			fragment: fragmentShader,
-			uniforms: {
-				iTime: { value: 0 },
-				iResolution: {
-					value: new Vec3(gl.canvas.width, gl.canvas.height, gl.canvas.width / gl.canvas.height)
-				},
-				hue: { value: hue },
-				hover: { value: 0 },
-				rot: { value: 0 },
-				hoverIntensity: { value: hoverIntensity }
-			}
-		});
-		programRef = program;
-
-		const mesh = new Mesh(gl, { geometry, program });
-		meshRef = mesh;
-
-		function resize() {
-			if (!containerElement) return;
-			const dpr = window.devicePixelRatio || 1;
-			const width = containerElement.clientWidth;
-			const height = containerElement.clientHeight;
-			renderer.setSize(width * dpr, height * dpr);
-			gl.canvas.style.width = width + 'px';
-			gl.canvas.style.height = height + 'px';
-			program.uniforms.iResolution.value.set(
-				gl.canvas.width,
-				gl.canvas.height,
-				gl.canvas.width / gl.canvas.height
-			);
-		}
-		window.addEventListener('resize', resize);
-		resize();
-
-		const handleMouseMove = (e: MouseEvent) => {
-			const rect = containerElement.getBoundingClientRect();
-			const x = e.clientX - rect.left;
-			const y = e.clientY - rect.top;
-			const width = rect.width;
-			const height = rect.height;
-			const size = Math.min(width, height);
-			const centerX = width / 2;
-			const centerY = height / 2;
-			const uvX = ((x - centerX) / size) * 2.0;
-			const uvY = ((y - centerY) / size) * 2.0;
-
-			if (Math.sqrt(uvX * uvX + uvY * uvY) < 0.8) {
-				targetHover = 1;
-			} else {
-				targetHover = 0;
-			}
-		};
-
-		const handleMouseLeave = () => {
-			targetHover = 0;
-		};
-
-		containerElement.addEventListener('mousemove', handleMouseMove);
-		containerElement.addEventListener('mouseleave', handleMouseLeave);
-
-		const update = (t: number) => {
-			rafRef = requestAnimationFrame(update);
-			const dt = (t - lastTime) * 0.001;
-			lastTime = t;
-
-			if (programRef) {
-				programRef.uniforms.iTime.value = t * 0.001;
-				programRef.uniforms.hue.value = hue;
-				programRef.uniforms.hoverIntensity.value = hoverIntensity;
-
-				const effectiveHover = forceHoverState ? 1 : targetHover;
-				programRef.uniforms.hover.value += (effectiveHover - programRef.uniforms.hover.value) * 0.1;
-
-				if (rotateOnHover && effectiveHover > 0.5) {
-					currentRot += dt * rotationSpeed;
-				}
-				programRef.uniforms.rot.value = currentRot;
-			}
-
-			renderer.render({ scene: mesh });
-		};
-		rafRef = requestAnimationFrame(update);
-
-		return () => {
-			console.log('destroy');
-			if (rafRef) cancelAnimationFrame(rafRef);
-			window.removeEventListener('resize', resize);
-			containerElement.removeEventListener('mousemove', handleMouseMove);
-			containerElement.removeEventListener('mouseleave', handleMouseLeave);
-			if (containerElement.contains(gl.canvas)) {
-				containerElement.removeChild(gl.canvas);
-			}
-			gl.getExtension('WEBGL_lose_context')?.loseContext();
-
-			// Cleanup refs
-			// rendererRef = null;
-			programRef = null;
-			meshRef = null;
-			geometryRef = null;
-			rafRef = null;
-		};
-	};
 </script>
 
-<div {@attach createOrb} class="orb-container {className}"></div>
+<Canvas
+	bind:ogl
+	onMouseMove={handleMouseMove}
+	onMouseLeave={() => (targetHover = 0)}
+	class={className}
+	alpha={true}
+	premultipliedAlpha={false}
+	onMount={({ gl }) => {
+		gl?.clearColor(0, 0, 0, 0);
+	}}
+>
+	<Program
+		{vertex}
+		{fragment}
+		uniforms={{
+			iTime: { value: 0 },
+			iResolution: { value: [1, 1, 1] },
+			hue: { value: hue },
+			hover: { value: 0 },
+			rot: { value: 0 },
+			hoverIntensity: { value: hoverIntensity }
+		}}
+		onResize={({ width, height }, program) => {
+			const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+			program.program.uniforms.iResolution.value = [
+				width * dpr,
+				height * dpr,
+				(width * dpr) / (height * dpr)
+			];
+		}}
+		onUpdate={({ time }, { program }) => {
+			const dt = (time - lastTime) * 0.001;
+			lastTime = time;
 
-<style>
-	.orb-container {
-		width: 100%;
-		height: 100%;
-		display: block;
-	}
-</style>
+			// Update uniforms with current prop values for reactivity
+			program.uniforms.iTime.value = time * 0.001;
+			program.uniforms.hue.value = hue;
+			program.uniforms.hoverIntensity.value = hoverIntensity;
+
+			// Smooth hover transition like original
+			const effectiveHover = forceHoverState ? 1 : targetHover;
+			currentHover += (effectiveHover - currentHover) * 0.1;
+			program.uniforms.hover.value = currentHover;
+
+			// Rotation on hover like original
+			if (rotateOnHover && effectiveHover > 0.5) {
+				currentRot += dt * rotationSpeed;
+			}
+			program.uniforms.rot.value = currentRot;
+		}}
+	>
+		<Triangle>
+			<Mesh
+				onUpdate={({ time }, mesh) => {
+					mesh.ogl.renderer?.render({ scene: mesh.mesh });
+				}}
+			/>
+		</Triangle>
+	</Program>
+</Canvas>

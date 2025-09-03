@@ -1,6 +1,9 @@
 <script lang="ts">
-	// @ts-ignore
-	import { Renderer, Program, Mesh, Triangle } from 'ogl';
+	import Canvas from '$lib/ogl/Canvas.svelte';
+	import Program from '$lib/ogl/Program.svelte';
+	import Mesh from '$lib/ogl/Mesh.svelte';
+	import Triangle from '$lib/ogl/Triangle.svelte';
+	import type { OglContext } from '$lib/ogl/Canvas.svelte';
 
 	interface LiquidChromeProps {
 		baseColor?: [number, number, number];
@@ -22,7 +25,17 @@
 		className = ''
 	}: LiquidChromeProps = $props();
 
-	const vertexShader = `
+	let ogl = $state<OglContext | null>(null);
+	let mousePos = $state([0, 0]);
+
+	// Mouse interaction handler
+	const handleMouseMove = ({ x, y }: { x: number; y: number }) => {
+		if (interactive) {
+			mousePos = [x, 1 - y]; // Flip Y coordinate like original
+		}
+	};
+
+	const vertex = `
       attribute vec2 position;
       attribute vec2 uv;
       varying vec2 vUv;
@@ -32,7 +45,7 @@
       }
     `;
 
-	const fragmentShader = `
+	const fragment = `
       precision highp float;
       uniform float uTime;
       uniform vec3 uResolution;
@@ -75,129 +88,51 @@
           gl_FragColor = col / float(samples);
       }
     `;
-
-	// WebGL state variables
-	let rendererRef: Renderer | null = null;
-	let programRef: Program | null = null;
-	let meshRef: Mesh<Triangle> | null = null;
-	let geometryRef: Triangle | null = null;
-	let rafRef: number | null = null;
-
-	const createLiquidChrome = (containerElement: HTMLDivElement) => {
-		const renderer = new Renderer({ antialias: true });
-		rendererRef = renderer;
-		const gl = renderer.gl;
-		gl.clearColor(1, 1, 1, 1);
-
-		const geometry = new Triangle(gl);
-		geometryRef = geometry;
-
-		const program = new Program(gl, {
-			vertex: vertexShader,
-			fragment: fragmentShader,
-			uniforms: {
-				uTime: { value: 0 },
-				uResolution: {
-					value: new Float32Array([
-						gl.canvas.width,
-						gl.canvas.height,
-						gl.canvas.width / gl.canvas.height
-					])
-				},
-				uBaseColor: { value: new Float32Array(baseColor) },
-				uAmplitude: { value: amplitude },
-				uFrequencyX: { value: frequencyX },
-				uFrequencyY: { value: frequencyY },
-				uMouse: { value: new Float32Array([0, 0]) }
-			}
-		});
-		programRef = program;
-
-		const mesh = new Mesh(gl, { geometry, program });
-		meshRef = mesh;
-
-		const resize = () => {
-			const scale = 1;
-			renderer.setSize(containerElement.offsetWidth * scale, containerElement.offsetHeight * scale);
-			const resUniform = program.uniforms.uResolution.value as Float32Array;
-			resUniform[0] = gl.canvas.width;
-			resUniform[1] = gl.canvas.height;
-			resUniform[2] = gl.canvas.width / gl.canvas.height;
-		};
-		window.addEventListener('resize', resize);
-		resize();
-
-		const handleMouseMove = (event: MouseEvent) => {
-			if (!interactive || !programRef) return;
-			const rect = containerElement.getBoundingClientRect();
-			const x = (event.clientX - rect.left) / rect.width;
-			const y = 1 - (event.clientY - rect.top) / rect.height;
-			const mouseUniform = programRef.uniforms.uMouse.value as Float32Array;
-			mouseUniform[0] = x;
-			mouseUniform[1] = y;
-		};
-
-		const handleTouchMove = (event: TouchEvent) => {
-			if (!interactive || !programRef) return;
-			if (event.touches.length > 0) {
-				const touch = event.touches[0];
-				const rect = containerElement.getBoundingClientRect();
-				const x = (touch.clientX - rect.left) / rect.width;
-				const y = 1 - (touch.clientY - rect.top) / rect.height;
-				const mouseUniform = programRef.uniforms.uMouse.value as Float32Array;
-				mouseUniform[0] = x;
-				mouseUniform[1] = y;
-			}
-		};
-
-		if (interactive) {
-			containerElement.addEventListener('mousemove', handleMouseMove);
-			containerElement.addEventListener('touchmove', handleTouchMove);
-		}
-
-		const update = (t: number) => {
-			rafRef = requestAnimationFrame(update);
-			if (programRef) {
-				programRef.uniforms.uTime.value = t * 0.001 * speed;
-
-				// Update reactive uniforms
-				const baseColorArray = programRef.uniforms.uBaseColor.value as Float32Array;
-				baseColorArray[0] = baseColor[0];
-				baseColorArray[1] = baseColor[1];
-				baseColorArray[2] = baseColor[2];
-				programRef.uniforms.uAmplitude.value = amplitude;
-				programRef.uniforms.uFrequencyX.value = frequencyX;
-				programRef.uniforms.uFrequencyY.value = frequencyY;
-			}
-			renderer.render({ scene: mesh });
-		};
-		rafRef = requestAnimationFrame(update);
-
-		containerElement.appendChild(gl.canvas);
-
-		return () => {
-			if (rafRef) cancelAnimationFrame(rafRef);
-			window.removeEventListener('resize', resize);
-			if (interactive) {
-				containerElement.removeEventListener('mousemove', handleMouseMove);
-				containerElement.removeEventListener('touchmove', handleTouchMove);
-			}
-			if (gl.canvas.parentElement) {
-				gl.canvas.parentElement.removeChild(gl.canvas);
-			}
-			gl.getExtension('WEBGL_lose_context')?.loseContext();
-
-			// Cleanup refs
-			rendererRef = null;
-			programRef = null;
-			meshRef = null;
-			geometryRef = null;
-			rafRef = null;
-		};
-	};
 </script>
 
-<div {@attach createLiquidChrome} class="liquidChrome-container {className}"></div>
+<Canvas
+	bind:ogl
+	onMouseMove={handleMouseMove}
+	class="liquidChrome-container {className}"
+	antialias={true}
+	onMount={({ gl }) => {
+		gl?.clearColor(1, 1, 1, 1);
+	}}
+>
+	<Program
+		{vertex}
+		{fragment}
+		uniforms={{
+			uTime: { value: 0 },
+			uResolution: { value: [1, 1, 1] },
+			uBaseColor: { value: baseColor },
+			uAmplitude: { value: amplitude },
+			uFrequencyX: { value: frequencyX },
+			uFrequencyY: { value: frequencyY },
+			uMouse: { value: mousePos }
+		}}
+		onResize={({ width, height }, program) => {
+			program.program.uniforms.uResolution.value = [width, height, width / height];
+		}}
+		onUpdate={({ time }, { program }) => {
+			// Update uniforms with current prop values for reactivity
+			program.uniforms.uTime.value = time * 0.001 * speed;
+			program.uniforms.uBaseColor.value = baseColor;
+			program.uniforms.uAmplitude.value = amplitude;
+			program.uniforms.uFrequencyX.value = frequencyX;
+			program.uniforms.uFrequencyY.value = frequencyY;
+			program.uniforms.uMouse.value = mousePos;
+		}}
+	>
+		<Triangle>
+			<Mesh
+				onUpdate={({ time }, mesh) => {
+					mesh.ogl.renderer?.render({ scene: mesh.mesh });
+				}}
+			/>
+		</Triangle>
+	</Program>
+</Canvas>
 
 <style>
 	.liquidChrome-container {

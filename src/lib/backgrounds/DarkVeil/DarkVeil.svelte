@@ -1,28 +1,10 @@
 <script lang="ts">
-	// @ts-ignore
-	import { Renderer, Program, Mesh, Triangle, Vec2 } from 'ogl';
-
-	interface DarkVeilProps {
-		hueShift?: number;
-		noiseIntensity?: number;
-		scanlineIntensity?: number;
-		speed?: number;
-		scanlineFrequency?: number;
-		warpAmount?: number;
-		resolutionScale?: number;
-		className?: string;
-	}
-
-	let {
-		hueShift = 0,
-		noiseIntensity = 0,
-		scanlineIntensity = 0,
-		speed = 0.5,
-		scanlineFrequency = 0,
-		warpAmount = 0,
-		resolutionScale = 1,
-		className = ''
-	}: DarkVeilProps = $props();
+	import Canvas, { OglContext } from '$lib/ogl/Canvas.svelte';
+	import Program from '$lib/ogl/Program.svelte';
+	import Mesh from '$lib/ogl/Mesh.svelte';
+	import Triangle from '$lib/ogl/Triangle.svelte';
+	import { Vec2 } from 'ogl';
+	import { untrack } from 'svelte';
 
 	const vertex = `
 attribute vec2 position;
@@ -96,99 +78,87 @@ void main(){
 }
 `;
 
-	// WebGL state variables
-	let rendererRef: Renderer | null = null;
-	let programRef: Program | null = null;
-	let meshRef: Mesh<Triangle> | null = null;
-	let geometryRef: Triangle | null = null;
-	let rafRef: number | null = null;
+	interface DarkVeilProps {
+		hueShift?: number;
+		noiseIntensity?: number;
+		scanlineIntensity?: number;
+		speed?: number;
+		scanlineFrequency?: number;
+		warpAmount?: number;
+		resolutionScale?: number;
+		class: string;
+	}
+
+	let {
+		hueShift = 0,
+		noiseIntensity = 0,
+		scanlineIntensity = 0,
+		speed = 0.5,
+		scanlineFrequency = 0,
+		warpAmount = 0,
+		resolutionScale = 1,
+		class: className = ''
+	}: DarkVeilProps = $props();
+
 	let startTime = 0;
+	let ogl: OglContext | null = null;
 
-	const createDarkVeil = (containerElement: HTMLDivElement) => {
-		const renderer = new Renderer({
-			dpr: typeof window !== 'undefined' ? Math.min(window.devicePixelRatio, 2) : 1,
-			canvas: undefined
+	$effect(() => {
+		resolutionScale;
+
+		untrack(() => {
+			console.log('update');
+			if (!ogl?.canvas) return;
+			const [width, height] = ogl.containerSize;
+
+			ogl.renderer?.setSize(width * resolutionScale, height * resolutionScale);
+			ogl.canvas.style.width = `${width}px`;
+			ogl.canvas.style.height = `${height}px`;
 		});
-		rendererRef = renderer;
-		const gl = renderer.gl;
-		const canvas = gl.canvas as HTMLCanvasElement;
-		canvas.style.width = '100%';
-		canvas.style.height = '100%';
-		canvas.style.display = 'block';
-		containerElement.appendChild(canvas);
-
-		const geometry = new Triangle(gl);
-		geometryRef = geometry;
-
-		const program = new Program(gl, {
-			vertex,
-			fragment,
-			uniforms: {
-				uTime: { value: 0 },
-				uResolution: { value: new Vec2() },
-				uHueShift: { value: hueShift },
-				uNoise: { value: noiseIntensity },
-				uScan: { value: scanlineIntensity },
-				uScanFreq: { value: scanlineFrequency },
-				uWarp: { value: warpAmount }
-			}
-		});
-		programRef = program;
-
-		const mesh = new Mesh(gl, { geometry, program });
-		meshRef = mesh;
-
-		const resize = () => {
-			const w = containerElement.clientWidth;
-			const h = containerElement.clientHeight;
-			renderer.setSize(w * resolutionScale, h * resolutionScale);
-			program.uniforms.uResolution.value.set(w, h);
-		};
-
-		window.addEventListener('resize', resize);
-		resize();
-
-		startTime = performance.now();
-
-		const loop = () => {
-			rafRef = requestAnimationFrame(loop);
-			program.uniforms.uTime.value = ((performance.now() - startTime) / 1000) * speed;
-
-			// Update uniforms with current prop values for reactivity
-			program.uniforms.uHueShift.value = hueShift;
-			program.uniforms.uNoise.value = noiseIntensity;
-			program.uniforms.uScan.value = scanlineIntensity;
-			program.uniforms.uScanFreq.value = scanlineFrequency;
-			program.uniforms.uWarp.value = warpAmount;
-
-			renderer.render({ scene: mesh });
-		};
-
-		rafRef = requestAnimationFrame(loop);
-
-		return () => {
-			if (rafRef) cancelAnimationFrame(rafRef);
-			window.removeEventListener('resize', resize);
-			if (canvas.parentElement === containerElement) {
-				containerElement.removeChild(canvas);
-			}
-
-			// Cleanup refs
-			rendererRef = null;
-			programRef = null;
-			meshRef = null;
-			geometryRef = null;
-			rafRef = null;
-		};
-	};
+	});
 </script>
 
-<div {@attach createDarkVeil} class="darkveil-container {className}"></div>
-
-<style>
-	.darkveil-container {
-		width: 100%;
-		height: 100%;
-		display: block;
-	}
-</style>
+<Canvas
+	bind:ogl
+	class={className}
+	onResize={({ width, height }, ogl) => {
+		ogl.renderer?.setSize(width * resolutionScale, height * resolutionScale);
+	}}
+>
+	<Program
+		onResize={({ width, height }, program) => {
+			program.program.uniforms.uResolution.value.set(width, height);
+		}}
+		{vertex}
+		{fragment}
+		uniforms={{
+			uTime: { value: 0 },
+			uResolution: { value: new Vec2() },
+			uHueShift: { value: hueShift },
+			uNoise: { value: noiseIntensity },
+			uScan: { value: scanlineIntensity },
+			uScanFreq: { value: scanlineFrequency },
+			uWarp: { value: warpAmount }
+		}}
+		onMount={() => {
+			startTime = performance.now();
+		}}
+		onUpdate={({ time }, program) => {
+			program.program.uniforms.uTime.value = ((performance.now() - startTime) / 1000) * speed;
+			// Update uniforms with current prop values for reactivity
+			program.program.uniforms.uHueShift.value = hueShift;
+			program.program.uniforms.uNoise.value = noiseIntensity;
+			program.program.uniforms.uScan.value = scanlineIntensity;
+			program.program.uniforms.uScanFreq.value = scanlineFrequency;
+			program.program.uniforms.uWarp.value = warpAmount;
+		}}
+	>
+		<Triangle>
+			<Mesh
+				onUpdate={({ time }, mesh) => {
+					mesh.ogl.renderer?.render({ scene: mesh.mesh });
+				}}
+			/>
+		</Triangle>
+	</Program>
+</Canvas>

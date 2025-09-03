@@ -1,6 +1,8 @@
 <script lang="ts">
-	// @ts-ignore
-	import { Renderer, Program, Triangle, Mesh } from 'ogl';
+	import Canvas, { OglContext } from '$lib/ogl/Canvas.svelte';
+	import Program from '$lib/ogl/Program.svelte';
+	import Mesh from '$lib/ogl/Mesh.svelte';
+	import Triangle from '$lib/ogl/Triangle.svelte';
 
 	interface RippleGridProps {
 		enableRainbow?: boolean;
@@ -15,7 +17,7 @@
 		gridRotation?: number;
 		mouseInteraction?: boolean;
 		mouseInteractionRadius?: number;
-		className?: string;
+		class: string;
 	}
 
 	let {
@@ -31,18 +33,19 @@
 		gridRotation = 0,
 		mouseInteraction = true,
 		mouseInteractionRadius = 1,
-		className = ''
+		class: className = ''
 	}: RippleGridProps = $props();
 
-	const vertexShader = `
-attribute vec2 position;
-varying vec2 vUv;
+	const vertex = `#version 300 es
+in vec2 position;
+out vec2 vUv;
 void main() {
     vUv = position * 0.5 + 0.5;
     gl_Position = vec4(position, 0.0, 1.0);
 }`;
 
-	const fragmentShader = `precision highp float;
+	const fragment = `#version 300 es
+precision highp float;
 uniform float iTime;
 uniform vec2 iResolution;
 uniform bool enableRainbow;
@@ -59,7 +62,8 @@ uniform bool mouseInteraction;
 uniform vec2 mousePosition;
 uniform float mouseInfluence;
 uniform float mouseInteractionRadius;
-varying vec2 vUv;
+in vec2 vUv;
+out vec4 fragColor;
 
 float pi = 3.141592;
 
@@ -132,163 +136,106 @@ void main() {
 
     float finalFade = ddd * vignette;
     float alpha = length(color) * finalFade * opacity;
-    gl_FragColor = vec4(color * t * finalFade * opacity, alpha);
+    fragColor = vec4(color * t * finalFade * opacity, alpha);
 }`;
 
-	function hexToRgb(hex: string): [number, number, number] {
-		const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-		return result
-			? [
-					parseInt(result[1], 16) / 255,
-					parseInt(result[2], 16) / 255,
-					parseInt(result[3], 16) / 255
-				]
-			: [1, 1, 1];
-	}
+	let ogl: OglContext | null = null;
+	let mousePosition = [0.5, 0.5];
+	let targetMouse = [0.5, 0.5];
+	let mouseInfluence = 0;
 
-	// WebGL state variables
-	let rendererRef: Renderer | null = null;
-	let programRef: Program | null = null;
-	let meshRef: Mesh<Triangle> | null = null;
-	let geometryRef: Triangle | null = null;
-	let rafRef: number | null = null;
-	let mousePositionRef = { x: 0.5, y: 0.5 };
-	let targetMouseRef = { x: 0.5, y: 0.5 };
-	let mouseInfluenceRef = 0;
+	// Mouse interaction handlers
+	const handleMouseMove = ({ x, y }: { x: number; y: number }) => {
+		if (!mouseInteraction) return;
+		targetMouse = [x, 1.0 - y]; // Flip Y coordinate
+	};
 
-	const createRippleGrid = (containerElement: HTMLDivElement) => {
-		const renderer = new Renderer({
-			dpr: typeof window !== 'undefined' ? Math.min(window.devicePixelRatio, 2) : 1,
-			alpha: true
-		});
-		rendererRef = renderer;
-		const gl = renderer.gl;
-		gl.enable(gl.BLEND);
-		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-		gl.canvas.style.width = '100%';
-		gl.canvas.style.height = '100%';
-		containerElement.appendChild(gl.canvas);
+	const handleMouseEnter = () => {
+		if (!mouseInteraction) return;
+		mouseInfluence = 1.0;
+	};
 
-		const uniforms = {
-			iTime: { value: 0 },
-			iResolution: { value: [1, 1] },
-			enableRainbow: { value: enableRainbow },
-			gridColor: { value: hexToRgb(gridColor) },
-			rippleIntensity: { value: rippleIntensity },
-			gridSize: { value: gridSize },
-			gridThickness: { value: gridThickness },
-			fadeDistance: { value: fadeDistance },
-			vignetteStrength: { value: vignetteStrength },
-			glowIntensity: { value: glowIntensity },
-			opacity: { value: opacity },
-			gridRotation: { value: gridRotation },
-			mouseInteraction: { value: mouseInteraction },
-			mousePosition: { value: [0.5, 0.5] },
-			mouseInfluence: { value: 0 },
-			mouseInteractionRadius: { value: mouseInteractionRadius }
-		};
-
-		const geometry = new Triangle(gl);
-		geometryRef = geometry;
-		const program = new Program(gl, { vertex: vertexShader, fragment: fragmentShader, uniforms });
-		programRef = program;
-		const mesh = new Mesh(gl, { geometry, program });
-		meshRef = mesh;
-
-		const resize = () => {
-			const { clientWidth: w, clientHeight: h } = containerElement;
-			renderer.setSize(w, h);
-			uniforms.iResolution.value = [w, h];
-		};
-
-		const handleMouseMove = (e: MouseEvent) => {
-			if (!mouseInteraction) return;
-			const rect = containerElement.getBoundingClientRect();
-			const x = (e.clientX - rect.left) / rect.width;
-			const y = 1.0 - (e.clientY - rect.top) / rect.height; // Flip Y coordinate
-			targetMouseRef = { x, y };
-		};
-
-		const handleMouseEnter = () => {
-			if (!mouseInteraction) return;
-			mouseInfluenceRef = 1.0;
-		};
-
-		const handleMouseLeave = () => {
-			if (!mouseInteraction) return;
-			mouseInfluenceRef = 0.0;
-		};
-
-		const render = (t: number) => {
-			rafRef = requestAnimationFrame(render);
-			uniforms.iTime.value = t * 0.001;
-
-			const lerpFactor = 0.1;
-			mousePositionRef.x += (targetMouseRef.x - mousePositionRef.x) * lerpFactor;
-			mousePositionRef.y += (targetMouseRef.y - mousePositionRef.y) * lerpFactor;
-
-			const currentInfluence = uniforms.mouseInfluence.value;
-			const targetInfluence = mouseInfluenceRef;
-			uniforms.mouseInfluence.value += (targetInfluence - currentInfluence) * 0.05;
-
-			uniforms.mousePosition.value = [mousePositionRef.x, mousePositionRef.y];
-
-			// Update uniforms with current prop values for reactivity
-			uniforms.enableRainbow.value = enableRainbow;
-			uniforms.gridColor.value = hexToRgb(gridColor);
-			uniforms.rippleIntensity.value = rippleIntensity;
-			uniforms.gridSize.value = gridSize;
-			uniforms.gridThickness.value = gridThickness;
-			uniforms.fadeDistance.value = fadeDistance;
-			uniforms.vignetteStrength.value = vignetteStrength;
-			uniforms.glowIntensity.value = glowIntensity;
-			uniforms.opacity.value = opacity;
-			uniforms.gridRotation.value = gridRotation;
-			uniforms.mouseInteraction.value = mouseInteraction;
-			uniforms.mouseInteractionRadius.value = mouseInteractionRadius;
-
-			renderer.render({ scene: mesh });
-		};
-
-		window.addEventListener('resize', resize);
-		if (mouseInteraction) {
-			containerElement.addEventListener('mousemove', handleMouseMove);
-			containerElement.addEventListener('mouseenter', handleMouseEnter);
-			containerElement.addEventListener('mouseleave', handleMouseLeave);
-		}
-		resize();
-
-		rafRef = requestAnimationFrame(render);
-
-		return () => {
-			if (rafRef) cancelAnimationFrame(rafRef);
-			window.removeEventListener('resize', resize);
-			if (mouseInteraction) {
-				containerElement.removeEventListener('mousemove', handleMouseMove);
-				containerElement.removeEventListener('mouseenter', handleMouseEnter);
-				containerElement.removeEventListener('mouseleave', handleMouseLeave);
-			}
-			renderer.gl.getExtension('WEBGL_lose_context')?.loseContext();
-			if (gl.canvas.parentElement === containerElement) {
-				containerElement.removeChild(gl.canvas);
-			}
-
-			// Cleanup refs
-			rendererRef = null;
-			programRef = null;
-			meshRef = null;
-			geometryRef = null;
-			rafRef = null;
-		};
+	const handleMouseLeave = () => {
+		if (!mouseInteraction) return;
+		mouseInfluence = 0.0;
 	};
 </script>
 
-<div {@attach createRippleGrid} class="ripple-grid-container {className}"></div>
+<Canvas
+	bind:ogl
+	class={className}
+	alpha={true}
+	dpr={typeof window !== 'undefined' ? Math.min(window.devicePixelRatio, 2) : 1}
+	onMouseMove={handleMouseMove}
+	onMouseEnter={handleMouseEnter}
+	onMouseLeave={handleMouseLeave}
+	onMount={(ogl) => {
+		// Enable blending for transparency
+		ogl.gl.enable(ogl.gl.BLEND);
+		ogl.gl.blendFunc(ogl.gl.SRC_ALPHA, ogl.gl.ONE_MINUS_SRC_ALPHA);
+	}}
+>
+	{#snippet children(ogl)}
+		{#if ogl.container}
+			<Program
+				onResize={({ width, height }, program) => {
+					program.program.uniforms.iResolution.value = [width, height];
+				}}
+				{vertex}
+				{fragment}
+				uniforms={{
+					iTime: { value: 0 },
+					iResolution: { value: [ogl.container.offsetWidth, ogl.container.offsetHeight] },
+					enableRainbow: { value: enableRainbow },
+					gridColor: { value: ogl.color.hexToArray(gridColor) },
+					rippleIntensity: { value: rippleIntensity },
+					gridSize: { value: gridSize },
+					gridThickness: { value: gridThickness },
+					fadeDistance: { value: fadeDistance },
+					vignetteStrength: { value: vignetteStrength },
+					glowIntensity: { value: glowIntensity },
+					opacity: { value: opacity },
+					gridRotation: { value: gridRotation },
+					mouseInteraction: { value: mouseInteraction },
+					mousePosition: { value: [0.5, 0.5] },
+					mouseInfluence: { value: 0 },
+					mouseInteractionRadius: { value: mouseInteractionRadius }
+				}}
+				onUpdate={({ time }, program) => {
+					program.program.uniforms.iTime.value = time * 0.001;
+					// Smooth mouse position and influence updates
+					const lerpFactor = 0.1;
+					mousePosition[0] += (targetMouse[0] - mousePosition[0]) * lerpFactor;
+					mousePosition[1] += (targetMouse[1] - mousePosition[1]) * lerpFactor;
 
-<style>
-	.ripple-grid-container {
-		width: 100%;
-		height: 100%;
-		display: block;
-	}
-</style>
+					const currentInfluence = program.program.uniforms.mouseInfluence.value;
+					program.program.uniforms.mouseInfluence.value +=
+						(mouseInfluence - currentInfluence) * 0.05;
+
+					// Update uniforms with current prop values for reactivity
+					program.program.uniforms.enableRainbow.value = enableRainbow;
+					program.program.uniforms.gridColor.value = ogl.color.hexToArray(gridColor);
+					program.program.uniforms.rippleIntensity.value = rippleIntensity;
+					program.program.uniforms.gridSize.value = gridSize;
+					program.program.uniforms.gridThickness.value = gridThickness;
+					program.program.uniforms.fadeDistance.value = fadeDistance;
+					program.program.uniforms.vignetteStrength.value = vignetteStrength;
+					program.program.uniforms.glowIntensity.value = glowIntensity;
+					program.program.uniforms.opacity.value = opacity;
+					program.program.uniforms.gridRotation.value = gridRotation;
+					program.program.uniforms.mouseInteraction.value = mouseInteraction;
+					program.program.uniforms.mousePosition.value = mousePosition;
+					program.program.uniforms.mouseInteractionRadius.value = mouseInteractionRadius;
+				}}
+			>
+				<Triangle>
+					<Mesh
+						onUpdate={({ time }, mesh) => {
+							mesh.ogl.renderer?.render({ scene: mesh.mesh });
+						}}
+					/>
+				</Triangle>
+			</Program>
+		{/if}
+	{/snippet}
+</Canvas>

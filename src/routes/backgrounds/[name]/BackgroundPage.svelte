@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { useTheme } from 'svelte-themes';
 	import Knob from '../../../components/Knob.svelte';
 	import { components } from '../../components.js';
 
@@ -9,21 +10,36 @@
 
 	let inputs = $state(component.inputs);
 
+	const theme = useTheme();
+
 	let defaultProps = $derived.by(() => {
+		console.log({ inputs });
 		if (component.name === 'Aurora') {
 			return {
 				colorStops: [inputs.color1?.value, inputs.color2?.value, inputs.color3?.value]
 			};
 		}
 
+		if (component.name === 'Particles') {
+			return {
+				particleColors:
+					theme.theme === 'dark' ? ['#ffffff', '#ffffff', '#ffffff'] : ['#000', '#000', '#000']
+			};
+		}
 		return {};
 	});
 	let props = $derived(
 		Object.entries(inputs).reduce((acc, [key, value]) => {
-			acc[key] = value.value;
+			Object.defineProperty(acc, key, {
+				get: () => value.value,
+				set: (v) => {
+					value.value = v;
+				}
+			});
 			return acc;
 		}, defaultProps)
 	);
+	console.log({ props });
 </script>
 
 <svelte:head>

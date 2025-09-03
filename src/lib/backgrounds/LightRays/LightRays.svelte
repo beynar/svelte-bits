@@ -1,6 +1,9 @@
 <script lang="ts">
-	// @ts-ignore
-	import { Renderer, Program, Triangle, Mesh } from 'ogl';
+	import Canvas from '$lib/ogl/Canvas.svelte';
+	import Program from '$lib/ogl/Program.svelte';
+	import Mesh from '$lib/ogl/Mesh.svelte';
+	import Triangle from '$lib/ogl/Triangle.svelte';
+	import type { OglContext } from '$lib/ogl/Canvas.svelte';
 
 	export type RaysOrigin =
 		| 'top-center'
@@ -44,6 +47,10 @@
 		className = ''
 	}: LightRaysProps = $props();
 
+	let ogl = $state<OglContext | null>(null);
+	let mousePos = $state([0.5, 0.5]);
+	let smoothMousePos = $state([0.5, 0.5]);
+
 	const hexToRgb = (hex: string): [number, number, number] => {
 		const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
 		return m
@@ -77,7 +84,14 @@
 		}
 	};
 
-	const vertexShader = `
+	// Mouse interaction handler
+	const handleMouseMove = ({ x, y }: { x: number; y: number }) => {
+		if (followMouse) {
+			mousePos = [x, y];
+		}
+	};
+
+	const vertex = `
 attribute vec2 position;
 varying vec2 vUv;
 void main() {
@@ -85,7 +99,7 @@ void main() {
   gl_Position = vec4(position, 0.0, 1.0);
 }`;
 
-	const fragmentShader = `precision highp float;
+	const fragment = `precision highp float;
 
 uniform float iTime;
 uniform vec2  iResolution;
@@ -178,203 +192,90 @@ void main() {
   mainImage(color, gl_FragCoord.xy);
   gl_FragColor  = color;
 }`;
-
-	// WebGL state variables
-	let rendererRef: Renderer | null = null;
-	let programRef: Program | null = null;
-	let meshRef: Mesh<Triangle> | null = null;
-	let geometryRef: Triangle | null = null;
-	let rafRef: number | null = null;
-	let mouseRef = { x: 0.5, y: 0.5 };
-	let smoothMouseRef = { x: 0.5, y: 0.5 };
-	let isVisible = $state(false);
-
-	const createLightRays = (containerElement: HTMLDivElement) => {
-		// Set up intersection observer for performance
-		const observer = new IntersectionObserver(
-			(entries) => {
-				isVisible = entries[0].isIntersecting;
-			},
-			{ threshold: 0.1 }
-		);
-		observer.observe(containerElement);
-
-		// Only initialize WebGL when visible
-		if (!isVisible) {
-			// Wait for visibility
-			const checkVisibility = () => {
-				if (isVisible) {
-					initWebGL();
-				} else {
-					requestAnimationFrame(checkVisibility);
-				}
-			};
-			requestAnimationFrame(checkVisibility);
-			return () => observer.disconnect();
-		}
-
-		function initWebGL() {
-			const renderer = new Renderer({
-				dpr: typeof window !== 'undefined' ? Math.min(window.devicePixelRatio, 2) : 1,
-				alpha: true
-			});
-			rendererRef = renderer;
-
-			const gl = renderer.gl;
-			gl.canvas.style.width = '100%';
-			gl.canvas.style.height = '100%';
-
-			// Clear container and add canvas
-			while (containerElement.firstChild) {
-				containerElement.removeChild(containerElement.firstChild);
-			}
-			containerElement.appendChild(gl.canvas);
-
-			const uniforms = {
-				iTime: { value: 0 },
-				iResolution: { value: [1, 1] },
-				rayPos: { value: [0, 0] },
-				rayDir: { value: [0, 1] },
-				raysColor: { value: hexToRgb(raysColor) },
-				raysSpeed: { value: raysSpeed },
-				lightSpread: { value: lightSpread },
-				rayLength: { value: rayLength },
-				pulsating: { value: pulsating ? 1.0 : 0.0 },
-				fadeDistance: { value: fadeDistance },
-				saturation: { value: saturation },
-				mousePos: { value: [0.5, 0.5] },
-				mouseInfluence: { value: mouseInfluence },
-				noiseAmount: { value: noiseAmount },
-				distortion: { value: distortion }
-			};
-
-			const geometry = new Triangle(gl);
-			geometryRef = geometry;
-			const program = new Program(gl, {
-				vertex: vertexShader,
-				fragment: fragmentShader,
-				uniforms
-			});
-			programRef = program;
-			const mesh = new Mesh(gl, { geometry, program });
-			meshRef = mesh;
-
-			const updatePlacement = () => {
-				if (!containerElement || !renderer) return;
-
-				renderer.dpr = Math.min(window.devicePixelRatio, 2);
-
-				const { clientWidth: wCSS, clientHeight: hCSS } = containerElement;
-				renderer.setSize(wCSS, hCSS);
-
-				const dpr = renderer.dpr;
-				const w = wCSS * dpr;
-				const h = hCSS * dpr;
-
-				uniforms.iResolution.value = [w, h];
-
-				const { anchor, dir } = getAnchorAndDir(raysOrigin, w, h);
-				uniforms.rayPos.value = anchor;
-				uniforms.rayDir.value = dir;
-			};
-
-			const handleMouseMove = (e: MouseEvent) => {
-				if (!containerElement || !rendererRef) return;
-				const rect = containerElement.getBoundingClientRect();
-				const x = (e.clientX - rect.left) / rect.width;
-				const y = (e.clientY - rect.top) / rect.height;
-				mouseRef = { x, y };
-			};
-
-			const loop = (t: number) => {
-				if (!rendererRef || !programRef || !meshRef) return;
-
-				rafRef = requestAnimationFrame(loop);
-				uniforms.iTime.value = t * 0.001;
-
-				if (followMouse && mouseInfluence > 0.0) {
-					const smoothing = 0.92;
-					smoothMouseRef.x = smoothMouseRef.x * smoothing + mouseRef.x * (1 - smoothing);
-					smoothMouseRef.y = smoothMouseRef.y * smoothing + mouseRef.y * (1 - smoothing);
-					uniforms.mousePos.value = [smoothMouseRef.x, smoothMouseRef.y];
-				}
-
-				// Update uniforms with current prop values for reactivity
-				uniforms.raysColor.value = hexToRgb(raysColor);
-				uniforms.raysSpeed.value = raysSpeed;
-				uniforms.lightSpread.value = lightSpread;
-				uniforms.rayLength.value = rayLength;
-				uniforms.pulsating.value = pulsating ? 1.0 : 0.0;
-				uniforms.fadeDistance.value = fadeDistance;
-				uniforms.saturation.value = saturation;
-				uniforms.mouseInfluence.value = mouseInfluence;
-				uniforms.noiseAmount.value = noiseAmount;
-				uniforms.distortion.value = distortion;
-
-				// Update ray position and direction based on origin
-				const { clientWidth: wCSS, clientHeight: hCSS } = containerElement;
-				const dpr = renderer.dpr;
-				const { anchor, dir } = getAnchorAndDir(raysOrigin, wCSS * dpr, hCSS * dpr);
-				uniforms.rayPos.value = anchor;
-				uniforms.rayDir.value = dir;
-
-				try {
-					renderer.render({ scene: mesh });
-				} catch (error) {
-					console.warn('WebGL rendering error:', error);
-					return;
-				}
-			};
-
-			window.addEventListener('resize', updatePlacement);
-			if (followMouse) {
-				window.addEventListener('mousemove', handleMouseMove);
-			}
-
-			updatePlacement();
-			rafRef = requestAnimationFrame(loop);
-
-			return () => {
-				if (rafRef) cancelAnimationFrame(rafRef);
-				window.removeEventListener('resize', updatePlacement);
-				if (followMouse) {
-					window.removeEventListener('mousemove', handleMouseMove);
-				}
-			};
-		}
-
-		const cleanup = initWebGL();
-
-		return () => {
-			observer.disconnect();
-			if (cleanup) cleanup();
-
-			if (rendererRef) {
-				try {
-					const canvas = rendererRef.gl.canvas;
-					const loseContextExt = rendererRef.gl.getExtension('WEBGL_lose_context');
-					if (loseContextExt) {
-						loseContextExt.loseContext();
-					}
-					if (canvas && canvas.parentNode) {
-						canvas.parentNode.removeChild(canvas);
-					}
-				} catch (error) {
-					console.warn('Error during WebGL cleanup:', error);
-				}
-			}
-
-			// Cleanup refs
-			rendererRef = null;
-			programRef = null;
-			meshRef = null;
-			geometryRef = null;
-			rafRef = null;
-		};
-	};
 </script>
 
-<div {@attach createLightRays} class="light-rays-container {className}"></div>
+<Canvas
+	bind:ogl
+	onMouseMove={handleMouseMove}
+	class="light-rays-container {className}"
+	alpha={true}
+	dpr={typeof window !== 'undefined' ? Math.min(window.devicePixelRatio, 2) : 1}
+>
+	<Program
+		{vertex}
+		{fragment}
+		uniforms={{
+			iTime: { value: 0 },
+			iResolution: { value: [1, 1] },
+			rayPos: { value: [0, 0] },
+			rayDir: { value: [0, 1] },
+			raysColor: { value: hexToRgb(raysColor) },
+			raysSpeed: { value: raysSpeed },
+			lightSpread: { value: lightSpread },
+			rayLength: { value: rayLength },
+			pulsating: { value: pulsating ? 1.0 : 0.0 },
+			fadeDistance: { value: fadeDistance },
+			saturation: { value: saturation },
+			mousePos: { value: smoothMousePos },
+			mouseInfluence: { value: mouseInfluence },
+			noiseAmount: { value: noiseAmount },
+			distortion: { value: distortion }
+		}}
+		onResize={({ width, height }, program) => {
+			const dpr = ogl?.gl ? Math.min(window.devicePixelRatio, 2) : 1;
+			const w = width * dpr;
+			const h = height * dpr;
+
+			program.program.uniforms.iResolution.value = [w, h];
+
+			const { anchor, dir } = getAnchorAndDir(raysOrigin, w, h);
+			program.program.uniforms.rayPos.value = anchor;
+			program.program.uniforms.rayDir.value = dir;
+		}}
+		onUpdate={({ time }, { program }) => {
+			// Update time
+			program.uniforms.iTime.value = time * 0.001;
+
+			// Mouse smoothing like original
+			if (followMouse && mouseInfluence > 0.0) {
+				const smoothing = 0.92;
+				smoothMousePos[0] = smoothMousePos[0] * smoothing + mousePos[0] * (1 - smoothing);
+				smoothMousePos[1] = smoothMousePos[1] * smoothing + mousePos[1] * (1 - smoothing);
+				program.uniforms.mousePos.value = smoothMousePos;
+			}
+
+			// Update reactive uniforms
+			program.uniforms.raysColor.value = hexToRgb(raysColor);
+			program.uniforms.raysSpeed.value = raysSpeed;
+			program.uniforms.lightSpread.value = lightSpread;
+			program.uniforms.rayLength.value = rayLength;
+			program.uniforms.pulsating.value = pulsating ? 1.0 : 0.0;
+			program.uniforms.fadeDistance.value = fadeDistance;
+			program.uniforms.saturation.value = saturation;
+			program.uniforms.mouseInfluence.value = mouseInfluence;
+			program.uniforms.noiseAmount.value = noiseAmount;
+			program.uniforms.distortion.value = distortion;
+
+			// Update ray position and direction based on origin
+			if (ogl?.gl) {
+				const dpr = Math.min(window.devicePixelRatio, 2);
+				const w = ogl.gl.canvas.width;
+				const h = ogl.gl.canvas.height;
+				const { anchor, dir } = getAnchorAndDir(raysOrigin, w, h);
+				program.uniforms.rayPos.value = anchor;
+				program.uniforms.rayDir.value = dir;
+			}
+		}}
+	>
+		<Triangle>
+			<Mesh
+				onUpdate={({ time }, mesh) => {
+					mesh.ogl.renderer?.render({ scene: mesh.mesh });
+				}}
+			/>
+		</Triangle>
+	</Program>
+</Canvas>
 
 <style>
 	.light-rays-container {

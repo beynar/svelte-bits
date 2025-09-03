@@ -1,6 +1,8 @@
 <script lang="ts">
-	// @ts-ignore
-	import { Renderer, Program, Mesh, Color, Triangle } from 'ogl';
+	import Canvas, { OglContext } from '$lib/ogl/Canvas.svelte';
+	import Program from '$lib/ogl/Program.svelte';
+	import Mesh from '$lib/ogl/Mesh.svelte';
+	import Triangle from '$lib/ogl/Triangle.svelte';
 
 	interface GalaxyProps {
 		focal?: [number, number];
@@ -19,7 +21,7 @@
 		repulsionStrength?: number;
 		autoCenterRepulsion?: number;
 		transparent?: boolean;
-		className?: string;
+		class: string;
 	}
 
 	let {
@@ -39,10 +41,10 @@
 		rotationSpeed = 0.1,
 		autoCenterRepulsion = 0,
 		transparent = false,
-		className = ''
+		class: className = ''
 	}: GalaxyProps = $props();
 
-	const vertexShader = `
+	const vertex = `
 attribute vec2 uv;
 attribute vec2 position;
 
@@ -54,7 +56,7 @@ void main() {
 }
 `;
 
-	const fragmentShader = `
+	const fragment = `
 precision highp float;
 
 uniform float uTime;
@@ -210,165 +212,106 @@ void main() {
 }
 `;
 
-	// WebGL state variables
-	let rendererRef: Renderer | null = null;
-	let programRef: Program | null = null;
-	let meshRef: Mesh<Triangle> | null = null;
-	let geometryRef: Triangle | null = null;
-	let animateIdRef: number | null = null;
-	let targetMousePos = { x: 0.5, y: 0.5 };
-	let smoothMousePos = { x: 0.5, y: 0.5 };
-	let targetMouseActive = 0.0;
-	let smoothMouseActive = 0.0;
+	let ogl = $state<OglContext | null>(null);
+	let mousePos = $state([0.5, 0.5]);
+	let smoothMousePos = $state([0.5, 0.5]);
+	let mouseActive = $state(0.0);
+	let smoothMouseActive = $state(0.0);
+	let currentStarSpeed = $state(0);
+</script>
 
-	const createGalaxy = (containerElement: HTMLDivElement) => {
-		const renderer = new Renderer({
-			alpha: transparent,
-			premultipliedAlpha: false
-		});
-		rendererRef = renderer;
-		const gl = renderer.gl;
-
-		if (transparent) {
+<Canvas
+	bind:ogl
+	class={className}
+	alpha={true}
+	premultipliedAlpha={false}
+	onMouseMove={({ x, y }) => {
+		if (mouseInteraction) {
+			mousePos = [x, y];
+			mouseActive = 1.0;
+		}
+	}}
+	onMouseLeave={() => {
+		if (mouseInteraction) {
+			mouseActive = 0.0;
+		}
+	}}
+	onMount={(ogl) => {
+		console.log('on mpount');
+		if (!transparent) {
+			return;
+		}
+		const gl = ogl.gl;
+		if (gl) {
 			gl.enable(gl.BLEND);
 			gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 			gl.clearColor(0, 0, 0, 0);
-		} else {
-			gl.clearColor(0, 0, 0, 1);
 		}
-
-		const resize = () => {
-			const scale = 1;
-			renderer.setSize(containerElement.offsetWidth * scale, containerElement.offsetHeight * scale);
-			if (programRef) {
-				programRef.uniforms.uResolution.value = new Color(
-					gl.canvas.width,
-					gl.canvas.height,
-					gl.canvas.width / gl.canvas.height
-				);
-			}
-		};
-
-		window.addEventListener('resize', resize, false);
-		resize();
-
-		const geometry = new Triangle(gl);
-		geometryRef = geometry;
-
-		const program = new Program(gl, {
-			vertex: vertexShader,
-			fragment: fragmentShader,
-			uniforms: {
-				uTime: { value: 0 },
-				uResolution: {
-					value: new Color(gl.canvas.width, gl.canvas.height, gl.canvas.width / gl.canvas.height)
-				},
-				uFocal: { value: new Float32Array(focal) },
-				uRotation: { value: new Float32Array(rotation) },
-				uStarSpeed: { value: starSpeed },
-				uDensity: { value: density },
-				uHueShift: { value: hueShift },
-				uSpeed: { value: speed },
-				uMouse: {
-					value: new Float32Array([smoothMousePos.x, smoothMousePos.y])
-				},
-				uGlowIntensity: { value: glowIntensity },
-				uSaturation: { value: saturation },
-				uMouseRepulsion: { value: mouseRepulsion },
-				uTwinkleIntensity: { value: twinkleIntensity },
-				uRotationSpeed: { value: rotationSpeed },
-				uRepulsionStrength: { value: repulsionStrength },
-				uMouseActiveFactor: { value: 0.0 },
-				uAutoCenterRepulsion: { value: autoCenterRepulsion },
-				uTransparent: { value: transparent }
-			}
-		});
-		programRef = program;
-
-		const mesh = new Mesh(gl, { geometry, program });
-		meshRef = mesh;
-
-		const update = (t: number) => {
-			animateIdRef = requestAnimationFrame(update);
+	}}
+>
+	<Program
+		onResize={({ width, height }, program) => {
+			program.program.uniforms.uResolution.value = [width, height, width / height];
+		}}
+		{vertex}
+		{fragment}
+		uniforms={{
+			uTime: { value: 0 },
+			uResolution: { value: [0, 0, 0] },
+			uFocal: { value: focal },
+			uRotation: { value: rotation },
+			uStarSpeed: { value: currentStarSpeed },
+			uDensity: { value: density },
+			uHueShift: { value: hueShift },
+			uSpeed: { value: speed },
+			uMouse: { value: smoothMousePos },
+			uGlowIntensity: { value: glowIntensity },
+			uSaturation: { value: saturation },
+			uMouseRepulsion: { value: mouseRepulsion },
+			uTwinkleIntensity: { value: twinkleIntensity },
+			uRotationSpeed: { value: rotationSpeed },
+			uRepulsionStrength: { value: repulsionStrength },
+			uMouseActiveFactor: { value: 0.0 },
+			uAutoCenterRepulsion: { value: autoCenterRepulsion },
+			uTransparent: { value: transparent }
+		}}
+		onUpdate={({ time }, program) => {
 			if (!disableAnimation) {
-				program.uniforms.uTime.value = t * 0.001;
-				program.uniforms.uStarSpeed.value = (t * 0.001 * starSpeed) / 10.0;
+				program.program.uniforms.uTime.value = time * 0.001;
+				currentStarSpeed = (time * 0.001 * starSpeed) / 10.0;
+				program.program.uniforms.uStarSpeed.value = currentStarSpeed;
 			}
 
+			// Smooth mouse interpolation (like in the original)
 			const lerpFactor = 0.05;
-			smoothMousePos.x += (targetMousePos.x - smoothMousePos.x) * lerpFactor;
-			smoothMousePos.y += (targetMousePos.y - smoothMousePos.y) * lerpFactor;
+			smoothMousePos[0] += (mousePos[0] - smoothMousePos[0]) * lerpFactor;
+			smoothMousePos[1] += (mousePos[1] - smoothMousePos[1]) * lerpFactor;
+			smoothMouseActive += (mouseActive - smoothMouseActive) * lerpFactor;
 
-			smoothMouseActive += (targetMouseActive - smoothMouseActive) * lerpFactor;
-
-			program.uniforms.uMouse.value[0] = smoothMousePos.x;
-			program.uniforms.uMouse.value[1] = smoothMousePos.y;
-			program.uniforms.uMouseActiveFactor.value = smoothMouseActive;
-
-			// Update uniforms with current prop values
-			program.uniforms.uFocal.value = new Float32Array(focal);
-			program.uniforms.uRotation.value = new Float32Array(rotation);
-			program.uniforms.uDensity.value = density;
-			program.uniforms.uHueShift.value = hueShift;
-			program.uniforms.uSpeed.value = speed;
-			program.uniforms.uGlowIntensity.value = glowIntensity;
-			program.uniforms.uSaturation.value = saturation;
-			program.uniforms.uMouseRepulsion.value = mouseRepulsion;
-			program.uniforms.uTwinkleIntensity.value = twinkleIntensity;
-			program.uniforms.uRotationSpeed.value = rotationSpeed;
-			program.uniforms.uRepulsionStrength.value = repulsionStrength;
-			program.uniforms.uAutoCenterRepulsion.value = autoCenterRepulsion;
-			program.uniforms.uTransparent.value = transparent;
-
-			renderer.render({ scene: mesh });
-		};
-
-		animateIdRef = requestAnimationFrame(update);
-		containerElement.appendChild(gl.canvas);
-
-		const handleMouseMove = (e: MouseEvent) => {
-			const rect = containerElement.getBoundingClientRect();
-			const x = (e.clientX - rect.left) / rect.width;
-			const y = 1.0 - (e.clientY - rect.top) / rect.height;
-			targetMousePos = { x, y };
-			targetMouseActive = 1.0;
-		};
-
-		const handleMouseLeave = () => {
-			targetMouseActive = 0.0;
-		};
-
-		if (mouseInteraction) {
-			containerElement.addEventListener('mousemove', handleMouseMove);
-			containerElement.addEventListener('mouseleave', handleMouseLeave);
-		}
-
-		return () => {
-			if (animateIdRef) cancelAnimationFrame(animateIdRef);
-			window.removeEventListener('resize', resize);
-			if (mouseInteraction) {
-				containerElement.removeEventListener('mousemove', handleMouseMove);
-				containerElement.removeEventListener('mouseleave', handleMouseLeave);
-			}
-			if (gl.canvas.parentElement === containerElement) {
-				containerElement.removeChild(gl.canvas);
-			}
-			gl.getExtension('WEBGL_lose_context')?.loseContext();
-
-			// Cleanup refs
-			rendererRef = null;
-			programRef = null;
-			meshRef = null;
-			geometryRef = null;
-			animateIdRef = null;
-		};
-	};
-</script>
-
-<div
-	{@attach createGalaxy}
-	class="galaxy-container {className}"
-	style:width={'100%'}
-	style:height={'100%'}
-	style:display={'block'}
-></div>
+			// Update uniforms with current prop values for reactivity
+			program.program.uniforms.uFocal.value = focal;
+			program.program.uniforms.uRotation.value = rotation;
+			program.program.uniforms.uDensity.value = density;
+			program.program.uniforms.uHueShift.value = hueShift;
+			program.program.uniforms.uSpeed.value = speed;
+			program.program.uniforms.uMouse.value = smoothMousePos;
+			program.program.uniforms.uGlowIntensity.value = glowIntensity;
+			program.program.uniforms.uSaturation.value = saturation;
+			program.program.uniforms.uMouseRepulsion.value = mouseRepulsion;
+			program.program.uniforms.uTwinkleIntensity.value = twinkleIntensity;
+			program.program.uniforms.uRotationSpeed.value = rotationSpeed;
+			program.program.uniforms.uRepulsionStrength.value = repulsionStrength;
+			program.program.uniforms.uMouseActiveFactor.value = smoothMouseActive;
+			program.program.uniforms.uAutoCenterRepulsion.value = autoCenterRepulsion;
+			program.program.uniforms.uTransparent.value = transparent;
+		}}
+	>
+		<Triangle>
+			<Mesh
+				onUpdate={({ time }, mesh) => {
+					mesh.ogl.renderer?.render({ scene: mesh.mesh });
+				}}
+			/>
+		</Triangle>
+	</Program>
+</Canvas>
