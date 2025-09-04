@@ -6,7 +6,7 @@
 	let { children: CHILDREN } = $props();
 </script>
 
-<SvelteTheme enableSystem attribute="data-theme">
+<SvelteTheme defaultTheme="dark" enableSystem attribute="data-theme">
 	{#snippet children(theme)}
 		<div class="bg-bg">
 			<header

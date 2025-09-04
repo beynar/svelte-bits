@@ -14,6 +14,8 @@
 	import Plasma from '$lib/backgrounds/Plasma/Plasma.svelte';
 	import RippleGrid from '$lib/backgrounds/RippleGrid/RippleGrid.svelte';
 	import { useTheme } from 'svelte-themes';
+	import { components } from './components.js';
+	import { render } from 'svelte/server';
 
 	const theme = useTheme();
 
@@ -29,20 +31,9 @@
 	</div>
 {/snippet}
 
-{@render card(GradientBlinds, 'Gradient Blinds')}
-{@render card(FaultyTerminal, 'Faulty Terminal')}
-{@render card(Galaxy, 'Galaxy')}
-{@render card(Aurora, 'Aurora')}
-{@render card(Balatro, 'Balatro')}
-{@render card(DarkVeil, 'Dark Veil')}
-{@render card(GridMotion, 'Grid Motion')}
-{@render card(Iridescence, 'Iridescence')}
-{@render card(LightRays, 'Light Rays')}
-{@render card(LiquidChrome, 'Liquid Chrome')}
-{@render card(Orb, 'Orb')}
-{@render card(Particles, 'Particles')}
-{@render card(Plasma, 'Plasma')}
-{@render card(RippleGrid, 'Ripple Grid')}
+{#each Object.entries(components) as [name, component]}
+	{@render card(component.Render, component.name)}
+{/each}
 
 <style>
 	.card {
