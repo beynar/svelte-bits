@@ -1,9 +1,5 @@
 <script lang="ts">
-	import Canvas from '$lib/ogl/Canvas.svelte';
-	import Program from '$lib/ogl/Program.svelte';
-	import Mesh from '$lib/ogl/Mesh.svelte';
-	import Triangle from '$lib/ogl/Triangle.svelte';
-	import type { OglContext } from '$lib/ogl/Canvas.svelte';
+	import { Canvas, OglContext, Program, Mesh, Triangle } from 'svogl';
 
 	export type RaysOrigin =
 		| 'top-center'
@@ -50,13 +46,6 @@
 	let ogl = $state<OglContext | null>(null);
 	let mousePos = $state([0.5, 0.5]);
 	let smoothMousePos = $state([0.5, 0.5]);
-
-	const hexToRgb = (hex: string): [number, number, number] => {
-		const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-		return m
-			? [parseInt(m[1], 16) / 255, parseInt(m[2], 16) / 255, parseInt(m[3], 16) / 255]
-			: [1, 1, 1];
-	};
 
 	const getAnchorAndDir = (
 		origin: RaysOrigin,
@@ -206,10 +195,10 @@ void main() {
 		{fragment}
 		uniforms={{
 			iTime: { value: 0 },
-			iResolution: { value: [1, 1] },
+			iResolution: { value: [1, 1], noUpdate: true },
 			rayPos: { value: [0, 0] },
 			rayDir: { value: [0, 1] },
-			raysColor: { value: hexToRgb(raysColor) },
+			raysColor: { value: ogl?.color.hexToArray(raysColor) },
 			raysSpeed: { value: raysSpeed },
 			lightSpread: { value: lightSpread },
 			rayLength: { value: rayLength },
@@ -243,18 +232,6 @@ void main() {
 				smoothMousePos[1] = smoothMousePos[1] * smoothing + mousePos[1] * (1 - smoothing);
 				program.uniforms.mousePos.value = smoothMousePos;
 			}
-
-			// Update reactive uniforms
-			program.uniforms.raysColor.value = hexToRgb(raysColor);
-			program.uniforms.raysSpeed.value = raysSpeed;
-			program.uniforms.lightSpread.value = lightSpread;
-			program.uniforms.rayLength.value = rayLength;
-			program.uniforms.pulsating.value = pulsating ? 1.0 : 0.0;
-			program.uniforms.fadeDistance.value = fadeDistance;
-			program.uniforms.saturation.value = saturation;
-			program.uniforms.mouseInfluence.value = mouseInfluence;
-			program.uniforms.noiseAmount.value = noiseAmount;
-			program.uniforms.distortion.value = distortion;
 
 			// Update ray position and direction based on origin
 			if (ogl?.gl) {

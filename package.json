@@ -3,10 +3,11 @@
 	"version": "0.0.1",
 	"scripts": {
 		"dev": "vite dev",
-		"build": "vite build && npm run prepack",
+		"build": "npm run generate-registry && vite build && npm run prepack",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
 		"prepack": "svelte-kit sync && svelte-package && publint",
+		"generate-registry": "node scripts/generate-registry.js",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"format": "prettier --write .",
@@ -74,6 +75,7 @@
 		"gsap": "^3.13.0",
 		"ogl": "^1.0.11",
 		"svelte-themes": "^2.0.8",
+		"svogl": "^0.0.9",
 		"wrangler": "^4.33.1"
 	}
 }

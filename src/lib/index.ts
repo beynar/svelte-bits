@@ -12,4 +12,6 @@ export { default as LiquidChrome } from './backgrounds/LiquidChrome/LiquidChrome
 export { default as Orb } from './backgrounds/Orb/Orb.svelte';
 export { default as Particles } from './backgrounds/Particles/Particles.svelte';
 export { default as Plasma } from './backgrounds/Plasma/Plasma.svelte';
+export { default as Prism } from './backgrounds/Prism/Prism.svelte';
+export { default as PrismaticBurst } from './backgrounds/PrismaticBurst/PrismaticBurst.svelte';
 export { default as RippleGrid } from './backgrounds/RippleGrid/RippleGrid.svelte';

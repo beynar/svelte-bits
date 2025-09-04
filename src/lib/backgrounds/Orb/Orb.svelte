@@ -1,9 +1,5 @@
 <script lang="ts">
-	import Canvas from '$lib/ogl/Canvas.svelte';
-	import Program from '$lib/ogl/Program.svelte';
-	import Mesh from '$lib/ogl/Mesh.svelte';
-	import Triangle from '$lib/ogl/Triangle.svelte';
-	import type { OglContext } from '$lib/ogl/Canvas.svelte';
+	import { Canvas, OglContext, Program, Mesh, Triangle } from 'svogl';
 
 	interface OrbProps {
 		hue?: number;
@@ -223,7 +219,7 @@
 		{fragment}
 		uniforms={{
 			iTime: { value: 0 },
-			iResolution: { value: [1, 1, 1] },
+			iResolution: { value: [1, 1, 1], noUpdate: true },
 			hue: { value: hue },
 			hover: { value: 0 },
 			rot: { value: 0 },
@@ -243,8 +239,6 @@
 
 			// Update uniforms with current prop values for reactivity
 			program.uniforms.iTime.value = time * 0.001;
-			program.uniforms.hue.value = hue;
-			program.uniforms.hoverIntensity.value = hoverIntensity;
 
 			// Smooth hover transition like original
 			const effectiveHover = forceHoverState ? 1 : targetHover;

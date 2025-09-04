@@ -1,8 +1,5 @@
 <script lang="ts">
-	import Canvas, { OglContext } from '$lib/ogl/Canvas.svelte';
-	import Program from '$lib/ogl/Program.svelte';
-	import Mesh from '$lib/ogl/Mesh.svelte';
-	import Triangle from '$lib/ogl/Triangle.svelte';
+	import { Canvas, OglContext, Program, Mesh, Triangle } from 'svogl';
 
 	interface GalaxyProps {
 		focal?: [number, number];
@@ -257,14 +254,14 @@ void main() {
 		{fragment}
 		uniforms={{
 			uTime: { value: 0 },
-			uResolution: { value: [0, 0, 0] },
+			uResolution: { value: [0, 0, 0], noUpdate: true },
 			uFocal: { value: focal },
 			uRotation: { value: rotation },
-			uStarSpeed: { value: currentStarSpeed },
+			uStarSpeed: { value: 0 },
 			uDensity: { value: density },
 			uHueShift: { value: hueShift },
 			uSpeed: { value: speed },
-			uMouse: { value: smoothMousePos },
+			uMouse: { value: [0, 0] },
 			uGlowIntensity: { value: glowIntensity },
 			uSaturation: { value: saturation },
 			uMouseRepulsion: { value: mouseRepulsion },
@@ -281,29 +278,13 @@ void main() {
 				currentStarSpeed = (time * 0.001 * starSpeed) / 10.0;
 				program.program.uniforms.uStarSpeed.value = currentStarSpeed;
 			}
-
 			// Smooth mouse interpolation (like in the original)
 			const lerpFactor = 0.05;
 			smoothMousePos[0] += (mousePos[0] - smoothMousePos[0]) * lerpFactor;
 			smoothMousePos[1] += (mousePos[1] - smoothMousePos[1]) * lerpFactor;
 			smoothMouseActive += (mouseActive - smoothMouseActive) * lerpFactor;
-
-			// Update uniforms with current prop values for reactivity
-			program.program.uniforms.uFocal.value = focal;
-			program.program.uniforms.uRotation.value = rotation;
-			program.program.uniforms.uDensity.value = density;
-			program.program.uniforms.uHueShift.value = hueShift;
-			program.program.uniforms.uSpeed.value = speed;
-			program.program.uniforms.uMouse.value = smoothMousePos;
-			program.program.uniforms.uGlowIntensity.value = glowIntensity;
-			program.program.uniforms.uSaturation.value = saturation;
-			program.program.uniforms.uMouseRepulsion.value = mouseRepulsion;
-			program.program.uniforms.uTwinkleIntensity.value = twinkleIntensity;
-			program.program.uniforms.uRotationSpeed.value = rotationSpeed;
-			program.program.uniforms.uRepulsionStrength.value = repulsionStrength;
 			program.program.uniforms.uMouseActiveFactor.value = smoothMouseActive;
-			program.program.uniforms.uAutoCenterRepulsion.value = autoCenterRepulsion;
-			program.program.uniforms.uTransparent.value = transparent;
+			program.program.uniforms.uMouse.value = smoothMousePos;
 		}}
 	>
 		<Triangle>

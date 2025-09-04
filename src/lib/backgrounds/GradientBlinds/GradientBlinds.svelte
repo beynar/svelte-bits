@@ -1,9 +1,5 @@
 <script lang="ts">
-	import Canvas from '$lib/ogl/Canvas.svelte';
-	import Program from '$lib/ogl/Program.svelte';
-	import Mesh from '$lib/ogl/Mesh.svelte';
-	import Triangle from '$lib/ogl/Triangle.svelte';
-	import type { OglContext } from '$lib/ogl/Canvas.svelte';
+	import { Canvas, OglContext, Program, Mesh, Triangle } from 'svogl';
 
 	interface GradientBlindsProps {
 		className?: string;
@@ -44,14 +40,6 @@
 	}: GradientBlindsProps = $props();
 
 	const MAX_COLORS = 8;
-
-	const hexToRGB = (hex: string): [number, number, number] => {
-		const c = hex.replace('#', '').padEnd(6, '0');
-		const r = parseInt(c.slice(0, 2), 16) / 255;
-		const g = parseInt(c.slice(2, 4), 16) / 255;
-		const b = parseInt(c.slice(4, 6), 16) / 255;
-		return [r, g, b];
-	};
 
 	const prepStops = (stops?: string[]) => {
 		const base = (stops && stops.length ? stops : ['#FF9FFC', '#5227FF']).slice(0, MAX_COLORS);
@@ -218,7 +206,7 @@ void main() {
 		{fragment}
 		uniforms={{
 			iTime: { value: 0 },
-			iResolution: { value: [1, 1, 1] },
+			iResolution: { value: [1, 1, 1], noUpdate: true },
 			iMouse: { value: [0, 0] },
 			uAngle: { value: (angle * Math.PI) / 180 },
 			uNoise: { value: noise },
@@ -281,16 +269,6 @@ void main() {
 				lastTime = time;
 			}
 
-			// Update reactive uniforms
-			program.uniforms.uAngle.value = (angle * Math.PI) / 180;
-			program.uniforms.uNoise.value = noise;
-			program.uniforms.uSpotlightRadius.value = spotlightRadius;
-			program.uniforms.uSpotlightSoftness.value = spotlightSoftness;
-			program.uniforms.uSpotlightOpacity.value = spotlightOpacity;
-			program.uniforms.uMirror.value = mirrorGradient ? 1.0 : 0.0;
-			program.uniforms.uDistort.value = distortAmount;
-			program.uniforms.uShineFlip.value = shineDirection === 'right' ? 1.0 : 0.0;
-
 			// Update blindCount reactively (respecting blindMinWidth if set)
 			if (blindMinWidth && blindMinWidth > 0 && ogl?.gl) {
 				const maxByMinWidth = Math.max(1, Math.floor(ogl.gl.canvas.width / blindMinWidth));
@@ -299,16 +277,6 @@ void main() {
 			} else {
 				program.uniforms.uBlindCount.value = Math.max(1, blindCount);
 			}
-
-			program.uniforms.uColor0.value = colorData.arr[0];
-			program.uniforms.uColor1.value = colorData.arr[1];
-			program.uniforms.uColor2.value = colorData.arr[2];
-			program.uniforms.uColor3.value = colorData.arr[3];
-			program.uniforms.uColor4.value = colorData.arr[4];
-			program.uniforms.uColor5.value = colorData.arr[5];
-			program.uniforms.uColor6.value = colorData.arr[6];
-			program.uniforms.uColor7.value = colorData.arr[7];
-			program.uniforms.uColorCount.value = colorData.count;
 		}}
 	>
 		<Triangle>

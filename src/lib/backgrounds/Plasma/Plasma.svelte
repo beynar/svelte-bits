@@ -1,8 +1,5 @@
 <script lang="ts">
-	import Canvas, { OglContext } from '$lib/ogl/Canvas.svelte';
-	import Program from '$lib/ogl/Program.svelte';
-	import Mesh from '$lib/ogl/Mesh.svelte';
-	import Triangle from '$lib/ogl/Triangle.svelte';
+	import { Canvas, OglContext, Program, Mesh, Triangle } from 'svogl';
 
 	interface PlasmaProps {
 		color?: string;
@@ -146,32 +143,19 @@ void main() {
 				{fragment}
 				uniforms={{
 					iTime: { value: 0 },
-					iResolution: { value: new Float32Array([1, 1]) },
+					iResolution: { value: new Float32Array([1, 1]), noUpdate: true },
 					uCustomColor: { value: new Float32Array(hexToRgb(color)) },
 					uUseCustomColor: { value: color ? 1.0 : 0.0 },
 					uSpeed: { value: speed * 0.4 },
 					uDirection: { value: direction === 'reverse' ? -1.0 : 1.0 },
 					uScale: { value: scale },
 					uOpacity: { value: opacity },
-					uMouse: { value: new Float32Array([0, 0]) },
+					uMouse: { value: [mousePos.x, mousePos.y] },
 					uMouseInteractive: { value: mouseInteractive ? 1.0 : 0.0 }
 				}}
 				onUpdate={({ time }, program) => {
 					let timeValue = (time - t0) * 0.001;
-					// Update color
-					const currentUseCustomColor = color ? 1.0 : 0.0;
-					const currentCustomColorRgb = hexToRgb(color);
-					program.program.uniforms.uCustomColor.value = currentCustomColorRgb;
-					program.program.uniforms.uUseCustomColor.value = currentUseCustomColor;
-
-					// Update other uniforms
-					program.program.uniforms.uSpeed.value = speed * 0.4;
-					program.program.uniforms.uScale.value = scale;
-					program.program.uniforms.uOpacity.value = opacity;
-					program.program.uniforms.uMouseInteractive.value = mouseInteractive ? 1.0 : 0.0;
 					program.program.uniforms.uMouse.value = [mousePos.x, mousePos.y];
-
-					// Handle direction changes
 					if (direction === 'pingpong') {
 						const cycle = Math.sin(timeValue * 0.5) * 1.0;
 						program.program.uniforms.uDirection.value = cycle;

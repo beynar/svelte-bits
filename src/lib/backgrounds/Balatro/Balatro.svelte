@@ -1,8 +1,5 @@
 <script lang="ts">
-	import Canvas, { OglContext } from '$lib/ogl/Canvas.svelte';
-	import Program from '$lib/ogl/Program.svelte';
-	import Mesh from '$lib/ogl/Mesh.svelte';
-	import Triangle from '$lib/ogl/Triangle.svelte';
+	import { Canvas, type OglContext, Program, Mesh, Triangle } from 'svogl';
 
 	interface BalatroProps {
 		spinRotation?: number;
@@ -139,72 +136,51 @@ void main() {
 }
 `;
 
-	let ogl = $state<OglContext | null>(null);
-	let mousePos = $state([0.5, 0.5]);
-
 	// Convert hex colors to vec4 arrays using $derived
 	const color1Vec4 = $derived(hexToVec4(color1));
 	const color2Vec4 = $derived(hexToVec4(color2));
 	const color3Vec4 = $derived(hexToVec4(color3));
 </script>
 
-<Canvas
-	bind:ogl
-	class={className}
-	onMouseMove={({ x, y }) => {
-		if (mouseInteraction) {
-			mousePos = [x, y];
-		}
-	}}
->
-	<Program
-		onResize={({ width, height }, program) => {
-			program.program.uniforms.iResolution.value = [width, height, width / height];
-		}}
-		{vertex}
-		{fragment}
-		uniforms={{
-			iTime: { value: 0 },
-			iResolution: { value: [0, 0, 0] },
-			uSpinRotation: { value: spinRotation },
-			uSpinSpeed: { value: spinSpeed },
-			uOffset: { value: offset },
-			uColor1: { value: color1Vec4 },
-			uColor2: { value: color2Vec4 },
-			uColor3: { value: color3Vec4 },
-			uContrast: { value: contrast },
-			uLighting: { value: lighting },
-			uSpinAmount: { value: spinAmount },
-			uPixelFilter: { value: pixelFilter },
-			uSpinEase: { value: spinEase },
-			uIsRotate: { value: isRotate },
-			uMouse: { value: mousePos }
-		}}
-		onUpdate={({ time }, program) => {
-			program.program.uniforms.iTime.value = time * 0.001;
-
-			// Update uniforms with current prop values for reactivity
-			program.program.uniforms.uSpinRotation.value = spinRotation;
-			program.program.uniforms.uSpinSpeed.value = spinSpeed;
-			program.program.uniforms.uOffset.value = offset;
-			program.program.uniforms.uColor1.value = color1Vec4;
-			program.program.uniforms.uColor2.value = color2Vec4;
-			program.program.uniforms.uColor3.value = color3Vec4;
-			program.program.uniforms.uContrast.value = contrast;
-			program.program.uniforms.uLighting.value = lighting;
-			program.program.uniforms.uSpinAmount.value = spinAmount;
-			program.program.uniforms.uPixelFilter.value = pixelFilter;
-			program.program.uniforms.uSpinEase.value = spinEase;
-			program.program.uniforms.uIsRotate.value = isRotate;
-			program.program.uniforms.uMouse.value = mousePos;
-		}}
-	>
-		<Triangle>
-			<Mesh
-				onUpdate={({ time }, mesh) => {
-					mesh.ogl.renderer?.render({ scene: mesh.mesh });
-				}}
-			/>
-		</Triangle>
-	</Program>
+<Canvas class={className}>
+	{#snippet children(ogl)}
+		<Program
+			{vertex}
+			{fragment}
+			uniforms={{
+				iTime: { value: 0 },
+				iResolution: {
+					value: [
+						ogl.containerSize[0],
+						ogl.containerSize[1],
+						ogl.containerSize[0] / ogl.containerSize[1]
+					]
+				},
+				uSpinRotation: { value: spinRotation },
+				uSpinSpeed: { value: spinSpeed },
+				uOffset: { value: offset },
+				uColor1: { value: color1Vec4 },
+				uColor2: { value: color2Vec4 },
+				uColor3: { value: color3Vec4 },
+				uContrast: { value: contrast },
+				uLighting: { value: lighting },
+				uSpinAmount: { value: spinAmount },
+				uPixelFilter: { value: pixelFilter },
+				uSpinEase: { value: spinEase },
+				uIsRotate: { value: isRotate },
+				uMouse: { value: ogl.mousePosition }
+			}}
+			onUpdate={({ time }, program) => {
+				program.program.uniforms.iTime.value = time * 0.001;
+			}}
+		>
+			<Triangle>
+				<Mesh
+					onUpdate={({ time }, mesh) => {
+						mesh.ogl.renderer?.render({ scene: mesh.mesh });
+					}}
+				/>
+			</Triangle>
+		</Program>
+	{/snippet}
 </Canvas>

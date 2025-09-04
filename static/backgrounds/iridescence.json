@@ -1,0 +1,17 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "iridescence",
+  "type": "registry:block",
+  "title": "Iridescence",
+  "description": "Iridescence background component",
+  "dependencies": [
+    "svogl"
+  ],
+  "files": [
+    {
+      "path": "src/lib/backgrounds/Iridescence/Iridescence.svelte",
+      "content": "<script lang=\"ts\">\n\timport { Canvas, OglContext, Program, Mesh, Triangle } from 'svogl';\n\n\tinterface IridescenceProps {\n\t\tcolor?: [number, number, number];\n\t\tspeed?: number;\n\t\tamplitude?: number;\n\t\tmouseReact?: boolean;\n\t\tclassName?: string;\n\t}\n\n\tlet {\n\t\tcolor = [1, 1, 1],\n\t\tspeed = 1.0,\n\t\tamplitude = 0.1,\n\t\tmouseReact = true,\n\t\tclassName = ''\n\t}: IridescenceProps = $props();\n\n\tlet ogl = $state<OglContext | null>(null);\n\tlet mousePos = $state([0.5, 0.5]);\n\n\t// Mouse interaction handler\n\tconst handleMouseMove = ({ x, y }: { x: number; y: number }) => {\n\t\tif (mouseReact) {\n\t\t\tmousePos = [x, 1.0 - y]; // Flip Y coordinate like original\n\t\t}\n\t};\n\n\tconst vertex = `\nattribute vec2 uv;\nattribute vec2 position;\n\nvarying vec2 vUv;\n\nvoid main() {\n  vUv = uv;\n  gl_Position = vec4(position, 0, 1);\n}\n`;\n\n\tconst fragment = `\nprecision highp float;\n\nuniform float uTime;\nuniform vec3 uColor;\nuniform vec3 uResolution;\nuniform vec2 uMouse;\nuniform float uAmplitude;\nuniform float uSpeed;\n\nvarying vec2 vUv;\n\nvoid main() {\n  float mr = min(uResolution.x, uResolution.y);\n  vec2 uv = (vUv.xy * 2.0 - 1.0) * uResolution.xy / mr;\n\n  uv += (uMouse - vec2(0.5)) * uAmplitude;\n\n  float d = -uTime * 0.5 * uSpeed;\n  float a = 0.0;\n  for (float i = 0.0; i < 8.0; ++i) {\n    a += cos(i - d - a * uv.x);\n    d += sin(uv.y * i + a);\n  }\n  d += uTime * 0.5 * uSpeed;\n  vec3 col = vec3(cos(uv * vec2(d, a)) * 0.6 + 0.4, cos(a + d) * 0.5 + 0.5);\n  col = cos(col * cos(vec3(d, a, 2.5)) * 0.5 + 0.5) * uColor;\n  gl_FragColor = vec4(col, 1.0);\n}\n`;\n</script>\n\n<Canvas\n\tbind:ogl\n\tonMouseMove={handleMouseMove}\n\tclass=\"iridescence-container {className}\"\n\tonMount={({ gl }) => {\n\t\tgl?.clearColor(1, 1, 1, 1);\n\t}}\n>\n\t<Program\n\t\t{vertex}\n\t\t{fragment}\n\t\tuniforms={{\n\t\t\tuTime: { value: 0 },\n\t\t\tuColor: { value: color },\n\t\t\tuResolution: { value: [1, 1, 1], noUpdate: true },\n\t\t\tuMouse: { value: mousePos },\n\t\t\tuAmplitude: { value: amplitude },\n\t\t\tuSpeed: { value: speed }\n\t\t}}\n\t\tonResize={({ width, height }, program) => {\n\t\t\tprogram.program.uniforms.uResolution.value = [width, height, width / height];\n\t\t}}\n\t\tonUpdate={({ time }, { program }) => {\n\t\t\tprogram.uniforms.uTime.value = time * 0.001;\n\t\t}}\n\t>\n\t\t<Triangle>\n\t\t\t<Mesh\n\t\t\t\tonUpdate={({ time }, mesh) => {\n\t\t\t\t\tmesh.ogl.renderer?.render({ scene: mesh.mesh });\n\t\t\t\t}}\n\t\t\t/>\n\t\t</Triangle>\n\t</Program>\n</Canvas>\n",
+      "type": "registry:component"
+    }
+  ]
+}

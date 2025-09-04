@@ -1,17 +1,17 @@
 {
     "$schema": "https://ui.shadcn.com/schema/registry-item.json",
-    "name": "test",
+    "name": "example",
     "type": "registry:block",
-    "title": "Test",
-    "description": "This is a test",
+    "title": "Example",
+    "description": "example description",
     "dependencies": [
       
-      
+      "svogl"
     ],
     "files": [
       {
-        "path": "public/ts/default/src/ts-default/Backgrounds/PixelBlast/PixelBlast.tsx",
-        "content": "YOOOOOO",
+        "path": "src/lib/backgrounds/example.svelte",
+        "content": "const example = content",
         "type": "registry:component"
       }      
     ]

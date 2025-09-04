@@ -1,9 +1,5 @@
 <script lang="ts">
-	import Canvas from '$lib/ogl/Canvas.svelte';
-	import Program from '$lib/ogl/Program.svelte';
-	import Mesh from '$lib/ogl/Mesh.svelte';
-	import Triangle from '$lib/ogl/Triangle.svelte';
-	import type { OglContext } from '$lib/ogl/Canvas.svelte';
+	import { Canvas, OglContext, Program, Mesh, Triangle } from 'svogl';
 
 	interface LiquidChromeProps {
 		baseColor?: [number, number, number];
@@ -93,7 +89,7 @@
 <Canvas
 	bind:ogl
 	onMouseMove={handleMouseMove}
-	class="liquidChrome-container {className}"
+	class={className}
 	antialias={true}
 	onMount={({ gl }) => {
 		gl?.clearColor(1, 1, 1, 1);
@@ -104,7 +100,7 @@
 		{fragment}
 		uniforms={{
 			uTime: { value: 0 },
-			uResolution: { value: [1, 1, 1] },
+			uResolution: { value: [1, 1, 1], noUpdate: true },
 			uBaseColor: { value: baseColor },
 			uAmplitude: { value: amplitude },
 			uFrequencyX: { value: frequencyX },
@@ -117,11 +113,6 @@
 		onUpdate={({ time }, { program }) => {
 			// Update uniforms with current prop values for reactivity
 			program.uniforms.uTime.value = time * 0.001 * speed;
-			program.uniforms.uBaseColor.value = baseColor;
-			program.uniforms.uAmplitude.value = amplitude;
-			program.uniforms.uFrequencyX.value = frequencyX;
-			program.uniforms.uFrequencyY.value = frequencyY;
-			program.uniforms.uMouse.value = mousePos;
 		}}
 	>
 		<Triangle>
@@ -133,11 +124,3 @@
 		</Triangle>
 	</Program>
 </Canvas>
-
-<style>
-	.liquidChrome-container {
-		width: 100%;
-		height: 100%;
-		display: block;
-	}
-</style>

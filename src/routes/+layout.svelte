@@ -15,9 +15,12 @@
 				<nav
 					class="mx-auto flex max-w-[1300px] items-center justify-between border-r border-l border-dashed border-border px-4 py-2 text-lg text-fg-secondary"
 				>
-					<ul>
+					<ul class="flex gap-6>
 						<li>
 							<a href="/">Home</a>
+						</li>
+						<li>
+							<a href="https://github.com/beynar/svelte-bits">Github</a>
 						</li>
 					</ul>
 

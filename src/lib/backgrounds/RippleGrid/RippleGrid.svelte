@@ -1,8 +1,5 @@
 <script lang="ts">
-	import Canvas, { OglContext } from '$lib/ogl/Canvas.svelte';
-	import Program from '$lib/ogl/Program.svelte';
-	import Mesh from '$lib/ogl/Mesh.svelte';
-	import Triangle from '$lib/ogl/Triangle.svelte';
+	import { Canvas, OglContext, Program, Mesh, Triangle } from 'svogl';
 
 	interface RippleGridProps {
 		enableRainbow?: boolean;
@@ -185,7 +182,10 @@ void main() {
 				{fragment}
 				uniforms={{
 					iTime: { value: 0 },
-					iResolution: { value: [ogl.container.offsetWidth, ogl.container.offsetHeight] },
+					iResolution: {
+						value: [ogl.container.offsetWidth, ogl.container.offsetHeight],
+						noUpdate: true
+					},
 					enableRainbow: { value: enableRainbow },
 					gridColor: { value: ogl.color.hexToArray(gridColor) },
 					rippleIntensity: { value: rippleIntensity },
@@ -212,20 +212,7 @@ void main() {
 					program.program.uniforms.mouseInfluence.value +=
 						(mouseInfluence - currentInfluence) * 0.05;
 
-					// Update uniforms with current prop values for reactivity
-					program.program.uniforms.enableRainbow.value = enableRainbow;
-					program.program.uniforms.gridColor.value = ogl.color.hexToArray(gridColor);
-					program.program.uniforms.rippleIntensity.value = rippleIntensity;
-					program.program.uniforms.gridSize.value = gridSize;
-					program.program.uniforms.gridThickness.value = gridThickness;
-					program.program.uniforms.fadeDistance.value = fadeDistance;
-					program.program.uniforms.vignetteStrength.value = vignetteStrength;
-					program.program.uniforms.glowIntensity.value = glowIntensity;
-					program.program.uniforms.opacity.value = opacity;
-					program.program.uniforms.gridRotation.value = gridRotation;
-					program.program.uniforms.mouseInteraction.value = mouseInteraction;
 					program.program.uniforms.mousePosition.value = mousePosition;
-					program.program.uniforms.mouseInteractionRadius.value = mouseInteractionRadius;
 				}}
 			>
 				<Triangle>

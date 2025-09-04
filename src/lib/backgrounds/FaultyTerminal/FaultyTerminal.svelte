@@ -1,9 +1,7 @@
 <script lang="ts">
-	import Canvas, { OglContext } from '$lib/ogl/Canvas.svelte';
-	import Program from '$lib/ogl/Program.svelte';
-	import Mesh from '$lib/ogl/Mesh.svelte';
-	import Triangle from '$lib/ogl/Triangle.svelte';
-
+	import { Canvas, Program, Mesh, Triangle, OglContext } from 'svogl';
+	// @ts-ignore
+	import { Vec2 } from 'ogl';
 	type Vec2 = [number, number];
 
 	interface FaultyTerminalProps {
@@ -344,25 +342,6 @@ void main() {
 			} else {
 				program.program.uniforms.iTime.value = frozenTime;
 			}
-
-			// Update uniforms with current prop values for reactivity
-			program.program.uniforms.uScale.value = scale;
-			program.program.uniforms.uGridMul.value = gridMul;
-			program.program.uniforms.uDigitSize.value = digitSize;
-			program.program.uniforms.uScanlineIntensity.value = scanlineIntensity;
-			program.program.uniforms.uGlitchAmount.value = glitchAmount;
-			program.program.uniforms.uFlickerAmount.value = flickerAmount;
-			program.program.uniforms.uNoiseAmp.value = noiseAmp;
-			program.program.uniforms.uChromaticAberration.value = chromaticAberration;
-			program.program.uniforms.uDither.value = ditherValue;
-			program.program.uniforms.uCurvature.value = curvature;
-			program.program.uniforms.uTint.value = tintVec;
-			program.program.uniforms.uMouse.value = smoothMousePos;
-			program.program.uniforms.uMouseStrength.value = mouseStrength;
-			program.program.uniforms.uUseMouse.value = mouseReact ? 1 : 0;
-			program.program.uniforms.uPageLoadProgress.value = pageLoadProgress;
-			program.program.uniforms.uUsePageLoadAnimation.value = pageLoadAnimation ? 1 : 0;
-			program.program.uniforms.uBrightness.value = brightness;
 		}}
 	>
 		<Triangle>

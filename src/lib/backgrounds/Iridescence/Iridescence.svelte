@@ -1,9 +1,5 @@
 <script lang="ts">
-	import Canvas from '$lib/ogl/Canvas.svelte';
-	import Program from '$lib/ogl/Program.svelte';
-	import Mesh from '$lib/ogl/Mesh.svelte';
-	import Triangle from '$lib/ogl/Triangle.svelte';
-	import type { OglContext } from '$lib/ogl/Canvas.svelte';
+	import { Canvas, OglContext, Program, Mesh, Triangle } from 'svogl';
 
 	interface IridescenceProps {
 		color?: [number, number, number];
@@ -89,8 +85,8 @@ void main() {
 		uniforms={{
 			uTime: { value: 0 },
 			uColor: { value: color },
-			uResolution: { value: [1, 1, 1] },
-			uMouse: { value: new Float32Array([0.5, 0.5]) },
+			uResolution: { value: [1, 1, 1], noUpdate: true },
+			uMouse: { value: mousePos },
 			uAmplitude: { value: amplitude },
 			uSpeed: { value: speed }
 		}}
@@ -98,12 +94,7 @@ void main() {
 			program.program.uniforms.uResolution.value = [width, height, width / height];
 		}}
 		onUpdate={({ time }, { program }) => {
-			// Update uniforms with current prop values for reactivity
 			program.uniforms.uTime.value = time * 0.001;
-			program.uniforms.uColor.value = color;
-			program.uniforms.uMouse.value = mousePos;
-			program.uniforms.uAmplitude.value = amplitude;
-			program.uniforms.uSpeed.value = speed;
 		}}
 	>
 		<Triangle>
@@ -115,11 +106,3 @@ void main() {
 		</Triangle>
 	</Program>
 </Canvas>
-
-<style>
-	.iridescence-container {
-		width: 100%;
-		height: 100%;
-		display: block;
-	}
-</style>

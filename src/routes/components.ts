@@ -12,9 +12,10 @@ import {
 	Orb,
 	Particles,
 	Plasma,
+	Prism,
+	PrismaticBurst,
 	RippleGrid
 } from '$lib/index.js';
-import Prism from '$lib/backgrounds/Prism/Prism.svelte';
 import type { Inputs } from '../components/Knob.svelte';
 
 export const components = [
@@ -1579,6 +1580,109 @@ export const components = [
 				max: 3,
 				step: 0.1,
 				value: 0.5
+			}
+		} satisfies Inputs
+	},
+	{
+		name: 'PrismaticBurst',
+		description: 'A prismatic burst effect with ray marching and customizable colors',
+		Render: PrismaticBurst,
+		presets: [
+			{
+				name: 'Rainbow Burst',
+				value: {
+					intensity: 2.0,
+					speed: 0.8,
+					animationType: 'rotate3d',
+					colors: ['#ff0080', '#8000ff', '#0080ff', '#00ff80', '#ff8000'],
+					distort: 1.5,
+					rayCount: 8
+				}
+			},
+			{
+				name: 'Fire Storm',
+				value: {
+					intensity: 3.0,
+					speed: 1.5,
+					animationType: 'rotate',
+					colors: ['#ff4400', '#ff8800', '#ffaa00', '#ffcc44'],
+					distort: 2.0,
+					rayCount: 12
+				}
+			},
+			{
+				name: 'Ice Crystal',
+				value: {
+					intensity: 1.5,
+					speed: 0.3,
+					animationType: 'hover',
+					colors: ['#88ccff', '#aaddff', '#cceeee', '#ffffff'],
+					distort: 0.5,
+					rayCount: 6,
+					hoverDampness: 0.8
+				}
+			},
+			{
+				name: 'Cosmic Energy',
+				value: {
+					intensity: 2.5,
+					speed: 1.2,
+					animationType: 'rotate3d',
+					colors: ['#ff00ff', '#8800ff', '#4400ff', '#0044ff'],
+					distort: 3.0,
+					rayCount: 16
+				}
+			}
+		],
+		inputs: {
+			intensity: {
+				type: 'range',
+				min: 0.1,
+				max: 5,
+				step: 0.1,
+				value: 2
+			},
+			speed: {
+				type: 'range',
+				min: 0,
+				max: 3,
+				step: 0.1,
+				value: 0.5
+			},
+			animationType: {
+				type: 'select',
+				options: ['rotate', 'rotate3d', 'hover'],
+				value: 'rotate3d'
+			},
+			distort: {
+				type: 'range',
+				min: 0,
+				max: 5,
+				step: 0.1,
+				value: 0
+			},
+			rayCount: {
+				type: 'range',
+				min: 0,
+				max: 32,
+				step: 1,
+				value: 0
+			},
+			hoverDampness: {
+				type: 'range',
+				min: 0,
+				max: 1,
+				step: 0.01,
+				value: 0
+			},
+			paused: {
+				type: 'checkbox',
+				value: false
+			},
+			mixBlendMode: {
+				type: 'select',
+				options: ['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'color-dodge', 'color-burn', 'hard-light', 'soft-light', 'difference', 'exclusion'],
+				value: 'lighten'
 			}
 		} satisfies Inputs
 	}

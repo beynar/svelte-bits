@@ -1,9 +1,5 @@
 <script lang="ts">
-	import Canvas, { OglContext } from '$lib/ogl/Canvas.svelte';
-	import Program from '$lib/ogl/Program.svelte';
-	import Mesh from '$lib/ogl/Mesh.svelte';
-	import Camera from '$lib/ogl/Camera.svelte';
-	import Geometry from '$lib/ogl/Geometry.svelte';
+	import { Canvas, OglContext, Program, Mesh, Camera, Geometry } from 'svogl';
 	interface ParticlesProps {
 		particleCount?: number;
 		particleSpread?: number;
@@ -150,10 +146,6 @@
 			fragment={fragmentShader}
 			onUpdate={({ time }, { program }) => {
 				program.uniforms.uTime.value = elapsed * 0.001;
-				program.uniforms.uSpread.value = particleSpread;
-				program.uniforms.uBaseSize.value = particleBaseSize;
-				program.uniforms.uSizeRandomness.value = sizeRandomness;
-				program.uniforms.uAlphaParticles.value = alphaParticles ? 1 : 0;
 			}}
 			transparent={true}
 			depthTest={false}
